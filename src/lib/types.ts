@@ -1,4 +1,4 @@
-// src/lib/types.ts
+// src/lib/types.ts (Revisão - Sem mudanças necessárias para esta funcionalidade específica agora)
 'use client';
 
 export interface Categoria {
@@ -14,7 +14,7 @@ export interface Tarefa {
   categoriaId: string;
   criadaEm: Date;
   completada?: boolean;
-  alarme?: string | Date;
+  alarme?: string | Date; // Usado para o input datetime-local e depois convertido para Date
 }
 
 export interface TarefaConcluida {
@@ -31,7 +31,7 @@ export interface ProgressoUsuario {
   totalTarefasConcluidas: number;
   tarefasConcluidasPorCategoria: Record<string, number>;
   ultimaTarefaConcluida?: Date | string;
-  totalPomodorosFocoCompletos?: number; // Adicionado
+  totalPomodorosFocoCompletos?: number;
 }
 
 export interface ConfigPomodoro {
