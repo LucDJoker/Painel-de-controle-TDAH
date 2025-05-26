@@ -76,14 +76,18 @@ export default function PainelTarefa({
           <div className="flex items-center gap-0.5 flex-shrink-0 ml-2">
             <Button variant="ghost" size="icon" onClick={() => onEditar(tarefa)} className="text-blue-600 hover:text-blue-700 hover:bg-blue-100 dark:text-blue-400 dark:hover:bg-blue-700/30 rounded-full w-9 h-9" aria-label="Editar tarefa"> <Edit3 className="w-4 h-4" /> </Button>
             <Button variant="ghost" size="icon" onClick={() => onConcluir(tarefa)} className="text-green-600 hover:text-green-700 hover:bg-green-100 dark:text-green-400 dark:hover:bg-green-700/30 rounded-full w-9 h-9" aria-label="Concluir tarefa"> <CheckCircle className="w-5 h-5" /> </Button>
+            
+            {/* CORREÇÃO: O Button AGORA É o AlertDialogTrigger */}
             <AlertDialog>
-              {/* CORREÇÃO AQUI: O Trigger é o ícone/div, não um Button aninhado */}
-              <AlertDialogTrigger 
-                asChild // Pode tentar com asChild se quiser que o div aja como o botão do shadcn
-                className="inline-flex items-center justify-center rounded-full w-9 h-9 text-red-500 hover:text-red-700 hover:bg-red-100 dark:text-red-400 dark:hover:bg-red-700/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 p-0 cursor-pointer" // Estilos de botão
-                aria-label="Excluir tarefa"
-              >
-                <div><Trash2 className="w-5 h-5" /></div>
+              <AlertDialogTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="text-red-500 hover:text-red-700 hover:bg-red-100 dark:text-red-400 dark:hover:bg-red-700/30 rounded-full w-9 h-9"
+                  aria-label="Excluir tarefa"
+                >
+                  <Trash2 className="w-5 h-5" />
+                </Button>
               </AlertDialogTrigger>
               <AlertDialogContent className="dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700">
                  <AlertDialogHeader><AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle><AlertDialogDescription className="dark:text-slate-400">Tem certeza que deseja excluir a tarefa "{tarefa.texto}"?</AlertDialogDescription></AlertDialogHeader>
@@ -126,9 +130,7 @@ export default function PainelTarefa({
               </div>
             ))}
           
-            {/* Input para adicionar nova sub-tarefa */}
-            {/* Condicional para mostrar o input de sub-tarefa apenas se mostrarSubtarefas for true */}
-            {mostrarSubtarefas && (
+            {mostrarSubtarefas && ( // Mostra input apenas se a seção de sub-tarefas estiver expandida
                 <div className="mt-2 flex gap-2 ml-2">
                     <Input 
                         type="text"

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect } from 'react'; // useEffect pode ser usado para outras lógicas se necessário
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { 
@@ -22,7 +22,7 @@ import PainelTarefa from "@/components/painel-tarefa";
 import { Estatisticas } from "@/components/estatisticas";
 import { Parabens } from "@/components/parabens";
 import { TimerPomodoro } from "@/components/timer-pomodoro";
-import { CalendarioTarefas } from "@/components/calendario-tarefas";
+import { CalendarioTarefas, type CalendarEvent } from "@/components/calendario-tarefas";
 import type { Tarefa, Categoria as CategoriaInfo, ConfigPomodoro, SubTarefa } from "@/lib/types"; 
 
 import { Input } from "@/components/ui/input";
@@ -68,9 +68,9 @@ export default function PaginaPrincipal() {
   const [corEdicaoCat, setCorEdicaoCat] = useState('#718096');
   const [mostrarModalEdicaoCategoria, setMostrarModalEdicaoCategoria] = useState(false);
 
-  const calendarEvents = useMemo(() => {
-    if (!dados || !dados.tarefas || typeof dados.tarefas !== 'object') return [];
-    const events = [];
+  const calendarEvents = useMemo((): CalendarEvent[] => {
+    if (!dados || !dados.tarefas || typeof dados.tarefas !== 'object' || !dados.categorias) return [];
+    const events: CalendarEvent[] = [];
     for (const categoriaId of Object.keys(dados.tarefas)) {
       const tarefasDaCategoria = dados.tarefas[categoriaId] || [];
       for (const tarefa of tarefasDaCategoria) {
@@ -78,13 +78,19 @@ export default function PaginaPrincipal() {
           const startDate = new Date(tarefa.alarme);
           if (!isNaN(startDate.getTime())) {
             const endDate = new Date(startDate.getTime() + 60 * 60 * 1000); 
-            events.push({ title: tarefa.texto, start: startDate, end: endDate, resource: tarefa });
+            const categoriaInfo = dados.categorias[tarefa.categoriaId];
+            events.push({ 
+              title: tarefa.texto, 
+              start: startDate, 
+              end: endDate, 
+              resource: { ...tarefa, categoriaInfo: categoriaInfo } 
+            });
           }
         }
       }
     }
     return events;
-  }, [dados.tarefas]);
+  }, [dados.tarefas, dados.categorias]);
 
   const totalTarefasAtivas = obterTotalTarefas();
   const todasTarefasDoPainelConcluidas = totalTarefasAtivas === 0 && !carregando && dados.categorias && Object.keys(dados.categorias).length > 0; 

@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "ES2017",
+    "target": "es2017",
     "lib": [
       "dom",
       "dom.iterable",
@@ -9,15 +9,17 @@
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
-    "noEmit": true,
-    "esModuleInterop": true,
+    "noFallthroughCasesInSwitch": true,
     "module": "esnext",
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "jsx": "preserve",
+    "jsx": "preserve", // <-- GARANTIDO QUE ESTÁ "react-jsx"
+    "noEmit": true,
     "incremental": true,
-    "baseUrl": ".", 
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
     "paths": {
       "@/*": [
         "./src/*"
@@ -27,15 +29,17 @@
       {
         "name": "next"
       }
-    ]
+    ],
+    "typeRoots": [
+      "./node_modules/@types",
+      "./src/types"
+    ] // Se você tiver tipos customizados em src/types
   },
   "include": [
+    "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
-    ".next/types/**/*.ts",
-    "build/types/**/*.ts",
-    "next-env.d.ts",
-    "out/types/**/*.ts"
+    ".next/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"
