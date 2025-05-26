@@ -1,4 +1,4 @@
-// src/lib/types.ts (Revisão - Sem mudanças necessárias para esta funcionalidade específica agora)
+// src/lib/types.ts
 'use client';
 
 export interface Categoria {
@@ -8,13 +8,21 @@ export interface Categoria {
   cor: string;
 }
 
+// NOVO: Interface para SubTarefa
+export interface SubTarefa {
+  id: string;
+  texto: string;
+  completada: boolean;
+}
+
 export interface Tarefa {
   id: string;
   texto: string;
   categoriaId: string;
   criadaEm: Date;
   completada?: boolean;
-  alarme?: string | Date; // Usado para o input datetime-local e depois convertido para Date
+  alarme?: string | Date;
+  subTarefas?: SubTarefa[]; // ADICIONADO: Array opcional de sub-tarefas
 }
 
 export interface TarefaConcluida {
@@ -23,6 +31,7 @@ export interface TarefaConcluida {
   categoriaId: string;
   concluidaEm: Date;
   alarme?: string | Date;
+  subTarefas?: SubTarefa[]; // Adicionado aqui também para consistência no histórico
 }
 
 export interface ProgressoUsuario {
