@@ -11,29 +11,40 @@ export interface Categoria {
 export interface Tarefa {
   id: string;
   texto: string;
-  categoriaId: string; // ID da Categoria à qual a tarefa pertence
+  categoriaId: string;
   criadaEm: Date;
   completada?: boolean;
+  alarme?: string | Date;
 }
 
 export interface TarefaConcluida {
-  id: string; // Pode ser o mesmo ID da Tarefa original
+  id: string;
   texto: string;
-  categoriaId: string; // ID da Categoria
+  categoriaId: string;
   concluidaEm: Date;
+  alarme?: string | Date;
 }
 
 export interface ProgressoUsuario {
   streakAtual: number;
   maiorStreak: number;
   totalTarefasConcluidas: number;
-  tarefasConcluidasPorCategoria: Record<string, number>; // A chave aqui é categoriaId
-  ultimaTarefaConcluida?: Date;
+  tarefasConcluidasPorCategoria: Record<string, number>;
+  ultimaTarefaConcluida?: Date | string;
+  totalPomodorosFocoCompletos?: number; // Adicionado
+}
+
+export interface ConfigPomodoro {
+  duracaoFocoMin: number;
+  duracaoPausaCurtaMin: number;
+  duracaoPausaLongaMin: number;
+  ciclosAtePausaLonga: number;
 }
 
 export interface DadosApp {
-  tarefas: Record<string, Tarefa[]>; // Chave é categoriaId (string), valor é array de Tarefas
+  tarefas: Record<string, Tarefa[]>;
   tarefasConcluidas: TarefaConcluida[];
   progresso: ProgressoUsuario;
-  categorias: Record<string, Categoria>; // Chave é categoriaId (string), valor é o objeto Categoria
+  categorias: Record<string, Categoria>;
+  configPomodoro: ConfigPomodoro;
 }

@@ -5,16 +5,18 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RefreshCw, PlusCircle, Trash2, CheckCircle } from "lucide-react";
+import { RefreshCw, PlusCircle, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { usePainel } from "@/lib/use-painel";
 import PainelTarefa from "@/components/painel-tarefa";
 import { Estatisticas } from "@/components/estatisticas";
 import { Parabens } from "@/components/parabens";
-import type { Tarefa, Categoria as CategoriaInfo } from "@/lib/types"; 
+import { TimerPomodoro } from "@/components/timer-pomodoro";
+import type { Tarefa, Categoria as CategoriaInfo, ConfigPomodoro } from "@/lib/types"; 
 
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 const EMOJIS_SUGERIDOS = ['📁', '🏠', '🎓', '💼', '💪', '❤️', '🎉', '💡', '💰', '✈️', '🍽️', '📚', '🛠️', '✨', '🎯', '🤔', '😊', '🔥'];
 
@@ -23,7 +25,7 @@ export default function PaginaPrincipal() {
     dados,
     carregando,
     concluirTarefa,
-    resetar,
+    resetar: resetarGeralDoHook, // Pegando a função resetar geral do hook
     obterTotalTarefas,
     jaConcluidoHoje,
     textoNovaTarefa,
@@ -31,10 +33,21 @@ export default function PaginaPrincipal() {
     adicionarTarefa,
     excluirTarefa,
     adicionarNovaCategoria,
-    excluirCategoria
+    excluirCategoria,
+    alarmeNovaTarefa,
+    setAlarmeNovaTarefa,
+    // Pomodoro
+    tempoRestantePomodoro,
+    pomodoroAtivo,
+    cicloAtualPomodoro,
+    ciclosFocoCompletos,
+    iniciarOuPausarPomodoro,
+    resetarPomodoro: resetarCicloPomodoro,
+    atualizarConfigPomodoro,
+    configPomodoro // Pegando a configPomodoro
   } = usePainel();
 
-  const [tarefaConcluidaTexto, setTarefaConcluidaTexto] = useState<string>(''); // Renomeado para evitar conflito
+  const [tarefaConcluidaTexto, setTarefaConcluidaTexto] = useState<string>('');
   const [mostrarParabensIndividual, setMostrarParabensIndividual] = useState(false);
   const [categoriaSelecionada, setCategoriaSelecionada] = useState<string>(''); 
   
@@ -43,8 +56,8 @@ export default function PaginaPrincipal() {
   const [corNovaCat, setCorNovaCat] = useState('#718096');
 
   const totalTarefasAtivas = obterTotalTarefas();
-  const todasConcluidasHoje = totalTarefasAtivas === 0 && !carregando; 
-  const venceuHoje = jaConcluidoHoje(); // Se alguma tarefa foi concluída hoje
+  const todasTarefasDoPainelConcluidas = totalTarefasAtivas === 0 && !carregando && dados.categorias && Object.keys(dados.categorias).length > 0; 
+  const venceuPeloMenosUmaHoje = jaConcluidoHoje();
 
   const handleConcluirTarefa = (tarefa: Tarefa) => {
     concluirTarefa(tarefa);
@@ -60,22 +73,21 @@ export default function PaginaPrincipal() {
     }, 3000);
   };
 
-  const handleReset = () => {
-    resetar(); 
+  // ESTA FUNÇÃO CHAMA O RESET GERAL DO HOOK
+  const handleResetPainel = () => { 
+    resetarGeralDoHook(); 
+    // resetarCicloPomodoro(); // O resetGeralDoHook já deve cuidar disso
     toast.success("Painel resetado!", { 
-      description: "Todas as tarefas e categorias foram restauradas para o estado inicial.",
+      description: "Todas as tarefas e categorias foram restauradas para o estado padrão.",
     });
   }; 
 
   const handleAdicionarComCategoria = () => {
-    if (textoNovaTarefa.trim() === "") {
-      toast.error("O texto da tarefa não pode estar vazio.");
-      return;
-    }
+    if (textoNovaTarefa.trim() === "") { toast.error("O texto da tarefa não pode estar vazio."); return; }
     if (categoriaSelecionada) {
-      adicionarTarefa(categoriaSelecionada);
-      setTextoNovaTarefa(''); // Limpa o input da tarefa também
-      // setCategoriaSelecionada(''); // Opcional: resetar o select
+      adicionarTarefa(categoriaSelecionada, alarmeNovaTarefa || undefined);
+      setTextoNovaTarefa(''); 
+      setAlarmeNovaTarefa(''); 
     } else {
       toast.error("Por favor, selecione uma categoria.");
     }
@@ -133,21 +145,34 @@ export default function PaginaPrincipal() {
           </h1>
           <p className="text-md sm:text-lg text-slate-600 dark:text-slate-400 max-w-xl mx-auto">
             O objetivo é fazer <strong>UMA</strong> coisa por dia. Só uma.
-            {venceuHoje && totalTarefasAtivas === 0 ? ( // Venceu hoje E não há mais tarefas ativas
+            {venceuPeloMenosUmaHoje && todasTarefasDoPainelConcluidas ? (
               <span className="text-green-600 font-semibold block mt-1"> ✅ Você zerou o dia! Incrível!</span>
-            ) : venceuHoje ? (
-              <span className="text-green-500 font-semibold block mt-1"> 👍 Boa! Uma já foi!</span>
+            ) : venceuPeloMenosUmaHoje ? (
+              <span className="text-green-500 font-semibold block mt-1"> 👍 Boa! Uma já foi! Continue assim!</span>
             ) : (
               <span className="block mt-1"> Se fizer, você venceu.</span>
             )}
           </p>
         </div>
 
-        <Estatisticas
+        {dados.progresso && <Estatisticas
           progresso={dados.progresso}
           totalTarefasDisponiveis={totalTarefasAtivas + (dados.progresso?.totalTarefasConcluidas || 0)}
-          concluidoHoje={venceuHoje}
-        />
+          concluidoHoje={venceuPeloMenosUmaHoje}
+        />}
+
+        {configPomodoro && ( // Verifica se configPomodoro existe
+            <TimerPomodoro
+                tempoRestante={tempoRestantePomodoro}
+                ativo={pomodoroAtivo}
+                cicloAtual={cicloAtualPomodoro}
+                ciclosCompletos={ciclosFocoCompletos}
+                configAtual={configPomodoro}
+                onIniciarPausar={iniciarOuPausarPomodoro}
+                onResetarCiclo={resetarCicloPomodoro}
+                onAtualizarConfig={atualizarConfigPomodoro}
+            />
+        )}
 
         <Card className="mb-6 shadow-lg dark:bg-slate-800/70 dark:border-slate-700">
           <CardHeader>
@@ -155,18 +180,18 @@ export default function PaginaPrincipal() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <h3 className="text-md font-medium mb-2 text-slate-700 dark:text-slate-300">Criar Nova Categoria</h3>
+              <h3 className="text-md font-semibold mb-2 text-slate-700 dark:text-slate-300">Criar Nova Categoria</h3>
               <div className="space-y-3 p-1">
                 <Input
                   type="text"
                   placeholder="Nome da Categoria (ex: Estudos)"
                   value={nomeNovaCat}
-                  onChange={(e) => setNomeNovaCat(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNomeNovaCat(e.target.value)}
                   className="dark:bg-slate-700 dark:border-slate-600 dark:text-slate-200"
                 />
                 <div className="grid grid-cols-3 gap-3 items-end">
                   <div className="col-span-2">
-                    <label htmlFor="emoji-select-cat" className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1 block">Emoji</label>
+                    <Label htmlFor="emoji-select-cat" className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1 block">Emoji</Label>
                     <Select value={emojiNovaCat} onValueChange={setEmojiNovaCat}>
                       <SelectTrigger id="emoji-select-cat" className="dark:bg-slate-700 dark:border-slate-600 dark:text-slate-200">
                         <SelectValue placeholder="Ícone" />
@@ -181,12 +206,12 @@ export default function PaginaPrincipal() {
                     </Select>
                   </div>
                   <div>
-                    <label htmlFor="color-picker-cat" className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1 block">Cor</label>
+                    <Label htmlFor="color-picker-cat" className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-1 block">Cor</Label>
                     <Input
                       id="color-picker-cat"
                       type="color"
                       value={corNovaCat}
-                      onChange={(e) => setCorNovaCat(e.target.value)}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCorNovaCat(e.target.value)}
                       className="w-full h-10 p-1 cursor-pointer rounded-md border-input dark:bg-slate-700 dark:border-slate-600"
                       title="Selecione uma cor"
                     />
@@ -264,25 +289,43 @@ export default function PaginaPrincipal() {
               disabled={!dados.categorias || Object.keys(dados.categorias).length === 0}
               className="dark:bg-slate-700 dark:border-slate-600 dark:text-slate-200"
             />
-            <Select
-              value={categoriaSelecionada}
-              onValueChange={(value: string) => setCategoriaSelecionada(value)}
-              disabled={!dados.categorias || Object.keys(dados.categorias).length === 0}
-            >
-              <SelectTrigger className="dark:bg-slate-700 dark:border-slate-600 dark:text-slate-200">
-                <SelectValue placeholder="Selecione uma categoria" />
-              </SelectTrigger>
-              <SelectContent className="dark:bg-slate-800 dark:text-slate-200">
-                {dados.categorias && Object.keys(dados.categorias).map((categoriaId) => {
-                  const cat = dados.categorias[categoriaId];
-                  return (
-                    <SelectItem key={cat.id} value={cat.id} className="dark:focus:bg-slate-700"> 
-                      {cat.emoji} {cat.nome}
-                    </SelectItem>
-                  );
-                })}
-              </SelectContent>
-            </Select>
+            <div className="space-y-1">
+                <Label htmlFor="categoria-tarefa" className="text-xs font-medium text-slate-600 dark:text-slate-400">
+                    Categoria da Tarefa
+                </Label>
+                <Select
+                  value={categoriaSelecionada}
+                  onValueChange={(value: string) => setCategoriaSelecionada(value)}
+                  disabled={!dados.categorias || Object.keys(dados.categorias).length === 0}
+                >
+                  <SelectTrigger id="categoria-tarefa" className="dark:bg-slate-700 dark:border-slate-600 dark:text-slate-200">
+                    <SelectValue placeholder="Selecione uma categoria" />
+                  </SelectTrigger>
+                  <SelectContent className="dark:bg-slate-800 dark:text-slate-200">
+                    {dados.categorias && Object.keys(dados.categorias).map((categoriaId) => {
+                      const cat = dados.categorias[categoriaId];
+                      return (
+                        <SelectItem key={cat.id} value={cat.id} className="dark:focus:bg-slate-700"> 
+                          {cat.emoji} {cat.nome}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="alarme-tarefa" className="text-xs font-medium text-slate-600 dark:text-slate-400">
+                Definir Alarme (Opcional)
+              </Label>
+              <Input
+                id="alarme-tarefa"
+                type="datetime-local"
+                value={alarmeNovaTarefa}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAlarmeNovaTarefa(e.target.value)}
+                className="dark:bg-slate-700 dark:border-slate-600 dark:text-slate-200"
+                disabled={!dados.categorias || Object.keys(dados.categorias).length === 0}
+              />
+            </div>
             <Button 
               onClick={handleAdicionarComCategoria} 
               className="w-full bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
@@ -297,7 +340,7 @@ export default function PaginaPrincipal() {
           </CardContent>
         </Card>
 
-        {(mostrarParabensIndividual && !todasConcluidasHoje) && (
+        {(mostrarParabensIndividual && !todasTarefasDoPainelConcluidas) && (
          <div className="mb-6">
             <Parabens
               tarefaConcluida={tarefaConcluidaTexto}
@@ -305,16 +348,16 @@ export default function PaginaPrincipal() {
           </div>
         )}
         
-        {todasConcluidasHoje && !carregando && (
+        {todasTarefasDoPainelConcluidas && !carregando && (
              <div className="mb-6">
              <Parabens
                todasConcluidas={true}
-               onReset={handleReset}
+               onReset={handleResetPainel} // CORRIGIDO AQUI
              />
            </div>
         )}
 
-        {(!todasConcluidasHoje && tarefasComNumeros.length > 0) && (
+        {(!todasTarefasDoPainelConcluidas && tarefasComNumeros.length > 0) && (
           <Card className="mb-6 shadow-lg dark:bg-slate-800/70 dark:border-slate-700">
             <CardHeader>
               <CardTitle className="text-xl font-semibold flex items-center justify-between">
@@ -335,7 +378,7 @@ export default function PaginaPrincipal() {
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel className="dark:bg-slate-700 dark:hover:bg-slate-600 dark:border-slate-600">Cancelar</AlertDialogCancel>
-                      <AlertDialogAction onClick={handleReset} className="bg-destructive hover:bg-destructive/80">
+                      <AlertDialogAction onClick={handleResetPainel} className="bg-destructive hover:bg-destructive/80"> {/* CORRIGIDO AQUI */}
                         Confirmar Reset
                       </AlertDialogAction>
                     </AlertDialogFooter>
@@ -357,12 +400,17 @@ export default function PaginaPrincipal() {
             </CardContent>
           </Card>
         )}
-        {(!todasConcluidasHoje && Object.keys(dados.categorias || {}).length > 0 && tarefasComNumeros.length === 0) && (
+        {/* Lógica para mensagens de "Nenhuma tarefa" */}
+        {(!carregando && Object.keys(dados.categorias || {}).length > 0 && tarefasComNumeros.length === 0 && !todasTarefasDoPainelConcluidas) && (
              <p className="text-center text-slate-500 dark:text-slate-400 py-8 mb-6">
                 Nenhuma tarefa disponível para as categorias existentes. Adicione algumas!
              </p>
         )}
-
+         {(!dados.categorias || Object.keys(dados.categorias).length === 0) && !carregando && (
+             <p className="text-center text-slate-500 dark:text-slate-400 py-8 mb-6">
+                Comece criando uma categoria para organizar suas tarefas!
+             </p>
+        )}
 
         {dados && dados.tarefasConcluidas && dados.tarefasConcluidas.length > 0 && ( 
           <Card className="shadow-lg dark:bg-slate-800/70 dark:border-slate-700">
