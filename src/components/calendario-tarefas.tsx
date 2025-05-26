@@ -1,7 +1,6 @@
 // src/components/calendario-tarefas.tsx
 'use client';
 
-// Não precisa de 'import React from 'react';' com o novo JSX Transform
 import { Calendar, dateFnsLocalizer, Views, type EventProps, type View } from 'react-big-calendar';
 import { format } from 'date-fns/format';
 import { parse } from 'date-fns/parse';
@@ -9,7 +8,8 @@ import { startOfWeek } from 'date-fns/startOfWeek';
 import { getDay } from 'date-fns/getDay';
 import { ptBR } from 'date-fns/locale';
 
-import type { Tarefa, Categoria } from '@/lib/types'; // Assumindo que Categoria é sua interface de detalhes
+// CORREÇÃO NO IMPORT: Adicionando Categoria
+import type { Tarefa, Categoria as CategoriaInfo } from '@/lib/types'; 
 
 // O CSS deve ser importado uma vez globalmente, por exemplo, no seu page.tsx ou layout.tsx
 // import 'react-big-calendar/lib/css/react-big-calendar.css';
@@ -47,7 +47,7 @@ export interface CalendarEvent {
   start: Date;
   end: Date;
   allDay?: boolean;
-  resource?: Tarefa & { categoriaInfo?: Categoria }; // Adicionando CategoriaInfo ao resource
+  resource?: Tarefa & { categoriaInfo?: CategoriaInfo }; // Usando CategoriaInfo aqui
 }
 
 interface CalendarioTarefasProps {
@@ -57,15 +57,16 @@ interface CalendarioTarefasProps {
 }
 
 const EventoDoCalendario = ({ event }: EventProps<CalendarEvent>) => {
-  const corEvento = event.resource?.categoriaInfo?.cor || '#3b82f6'; // Usa a cor da categoria ou um azul padrão
+  // Usa a cor da categoria do resource, ou um azul padrão
+  const corDeFundoDoEvento = event.resource?.categoriaInfo?.cor || '#3b82f6'; 
 
   return (
     <div 
       className="text-xs p-1 rounded text-white"
       style={{ 
-        backgroundColor: corEvento, 
+        backgroundColor: corDeFundoDoEvento, 
         opacity: 0.9,
-        borderColor: corEvento, // Adiciona uma borda da mesma cor para mais definição
+        borderColor: corDeFundoDoEvento,
         borderWidth: '1px',
         borderStyle: 'solid'
       }}
