@@ -1,4 +1,3 @@
-// src/lib/use-painel.ts
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -9,11 +8,6 @@ import { obterDadosIniciais } from './dados-iniciais';
 
 type TipoCicloPomodoro = 'FOCO' | 'PAUSA_CURTA' | 'PAUSA_LONGA';
 
-const DURACAO_FOCO_PADRAO = 25; // Minutos
-const DURACAO_PAUSA_CURTA_PADRAO = 5;
-const DURACAO_PAUSA_LONGA_PADRAO = 15;
-const CICLOS_ATE_PAUSA_LONGA_PADRAO = 4;
-
 export function usePainel() {
   const dadosIniciaisGlobais = useRef(obterDadosIniciais());
   const [dados, setDados] = useState<DadosApp>(() => carregarDados());
@@ -21,15 +15,14 @@ export function usePainel() {
   const [textoNovaTarefa, setTextoNovaTarefa] = useState('');
   const [alarmeNovaTarefa, setAlarmeNovaTarefa] = useState<string>('');
 
-  const getConfigPomodoro = useCallback(
-    (): ConfigPomodoro => dados.configPomodoro || dadosIniciaisGlobais.current.configPomodoro,
-    [dados.configPomodoro, dadosIniciaisGlobais]
-  );
+  const getConfigPomodoro = useCallback((): ConfigPomodoro => {
+    return dados.configPomodoro || dadosIniciaisGlobais.current.configPomodoro;
+  }, [dados.configPomodoro]); // Removido dadosIniciaisGlobais daqui
 
   const [tempoRestantePomodoro, setTempoRestantePomodoro] = useState(getConfigPomodoro().duracaoFocoMin * 60);
   const [pomodoroAtivo, setPomodoroAtivo] = useState(false);
   const [cicloAtualPomodoro, setCicloAtualPomodoro] = useState<TipoCicloPomodoro>('FOCO');
-  const [ciclosCompletos, setCiclosCompletos] = useState(0);
+  const [ciclosCompletos, setCiclosCompletos] = useState(0); 
   
   const intervalRefPomodoro = useRef<NodeJS.Timeout | null>(null);
   const audioRefPomodoro = useRef<HTMLAudioElement | null>(null);
@@ -46,53 +39,53 @@ export function usePainel() {
         audioRefPomodoro.current = new Audio('/pomodoro_fim.mp3');
         audioRefAlarmeTarefa.current = new Audio('/alarme.mp3');
     }
-  }, [dadosIniciaisGlobais]); 
+  }, []); // Roda apenas na montagem
 
-  useEffect(() => {
-    if (!carregando) {
-      salvarDados(dados);
-    }
+  useEffect(() => { 
+    if (!carregando) { 
+      salvarDados(dados); 
+    } 
   }, [dados, carregando]);
   
   const tocarSom = useCallback((audioElement: HTMLAudioElement | null, nomeSom: string): void => {
     if (audioElement) {
       audioElement.currentTime = 0;
-      audioElement.play().catch(error => {
-        console.warn(`Não foi possível tocar o som (${nomeSom}) automaticamente:`, error);
-      });
+      audioElement.play().catch(e => console.warn(`Som ${nomeSom} bloqueado: ${e.message}`));
     }
   },[]);
 
   useEffect(() => { 
-    if (carregando || typeof window === 'undefined' || !dados || !dados.tarefas) return;
-    const verificarAlarmes = (): void => {
-      const agora = new Date();
-      let algumaNotificacaoMostradaParaToast = false;
-      Object.values(dados.tarefas).flat().forEach(tarefa => {
-        if (tarefa.alarme && !tarefa.completada) {
-          const dataAlarme = new Date(tarefa.alarme);
-          const diffTempo = agora.getTime() - dataAlarme.getTime();
-          if (dataAlarme <= agora && diffTempo < 60000 && diffTempo >= 0) {
-            if (Notification.permission === "granted") {
-              new Notification("Alarme de Tarefa!", { body: `Hora de fazer: ${tarefa.texto}`, icon: "/icon-192x192.png", tag: tarefa.id });
-              tocarSom(audioRefAlarmeTarefa.current, "Alarme de Tarefa");
-              if (!algumaNotificacaoMostradaParaToast) { toast.info(`🔔 Alarme: ${tarefa.texto}`); algumaNotificacaoMostradaParaToast = true; }
-            } else if (Notification.permission !== "denied") {
-              Notification.requestPermission().then(permission => {
-                if (permission === "granted") { 
-                  new Notification("Alarme de Tarefa!", { body: `Hora de fazer: ${tarefa.texto}`, icon: "/icon-192x192.png", tag: tarefa.id });
-                  tocarSom(audioRefAlarmeTarefa.current, "Alarme de Tarefa");
-                  if (!algumaNotificacaoMostradaParaToast) { toast.info(`🔔 Alarme: ${tarefa.texto}`); algumaNotificacaoMostradaParaToast = true; }
-                 }
-              });
-            }
-          }
+    if (carregando || typeof window === 'undefined' || !dados.tarefas) return;
+    const verificarAlarmes = ():void => {
+        const agora = new Date();
+        let algumaNotificacaoMostradaParaToast = false;
+        if (dados.tarefas && typeof dados.tarefas === 'object') {
+            Object.values(dados.tarefas).flat().forEach(tarefa => {
+              if (tarefa.alarme && !tarefa.completada) {
+                const dataAlarme = new Date(tarefa.alarme);
+                const diffTempo = agora.getTime() - dataAlarme.getTime();
+                if (dataAlarme <= agora && diffTempo < 60000 && diffTempo >= 0) {
+                  if (Notification.permission === "granted") {
+                    new Notification("Alarme de Tarefa!", { body: `Hora de fazer: ${tarefa.texto}`, icon: "/icon-192x192.png", tag: tarefa.id });
+                    tocarSom(audioRefAlarmeTarefa.current, "Alarme de Tarefa");
+                    if (!algumaNotificacaoMostradaParaToast) { toast.info(`🔔 Alarme: ${tarefa.texto}`); algumaNotificacaoMostradaParaToast = true; }
+                  } else if (Notification.permission !== "denied") {
+                    Notification.requestPermission().then(permission => {
+                      if (permission === "granted") { 
+                        new Notification("Alarme de Tarefa!", { body: `Hora de fazer: ${tarefa.texto}`, icon: "/icon-192x192.png", tag: tarefa.id });
+                        tocarSom(audioRefAlarmeTarefa.current, "Alarme de Tarefa");
+                        if (!algumaNotificacaoMostradaParaToast) { toast.info(`🔔 Alarme: ${tarefa.texto}`); algumaNotificacaoMostradaParaToast = true; }
+                       }
+                    });
+                  }
+                }
+              }
+            });
         }
-      });
-    };
-    if (typeof Notification !== 'undefined' && Notification.permission === "default") { Notification.requestPermission(); }
-    const intervalId = setInterval(verificarAlarmes, 30000); 
-    return () => clearInterval(intervalId);
+      };
+      if (typeof Notification !== 'undefined' && Notification.permission === "default") { Notification.requestPermission(); }
+      const intervalId = setInterval(verificarAlarmes, 30000); 
+      return () => clearInterval(intervalId);
   }, [dados.tarefas, carregando, tocarSom]);
 
   useEffect(() => { 
@@ -106,11 +99,11 @@ export function usePainel() {
       if (cicloAtualPomodoro === 'FOCO') {
         const novosCiclos = ciclosCompletos + 1;
         setCiclosCompletos(novosCiclos);
-        setDados(prevDados => {
-          const dProgresso = prevDados.progresso || dadosIniciaisGlobais.current.progresso;
+        setDados(prev => {
+          const dProgresso = prev.progresso || dadosIniciaisGlobais.current.progresso;
           const novosDadosProgresso = { ...dProgresso };
           novosDadosProgresso.totalPomodorosFocoCompletos = (novosDadosProgresso.totalPomodorosFocoCompletos || 0) + 1;
-          return { ...prevDados, progresso: novosDadosProgresso };
+          return { ...prev, progresso: novosDadosProgresso };
         });
         toast.success("💪 Sessão de Foco Concluída!", { description: "Hora de uma pausa." });
         if (novosCiclos > 0 && novosCiclos % confPomo.ciclosAtePausaLonga === 0) {
@@ -143,33 +136,36 @@ export function usePainel() {
     if (cicloAtualPomodoro === 'FOCO') setTempoRestantePomodoro(confPomo.duracaoFocoMin * 60);
     else if (cicloAtualPomodoro === 'PAUSA_CURTA') setTempoRestantePomodoro(confPomo.duracaoPausaCurtaMin * 60);
     else if (cicloAtualPomodoro === 'PAUSA_LONGA') setTempoRestantePomodoro(confPomo.duracaoPausaLongaMin * 60);
-    // Não reseta ciclosCompletos aqui intencionalmente, para manter a contagem da sessão.
-    // Se quiser resetar o contador de ciclos completados da sessão atual, adicione: setCiclosCompletos(0);
+    // setCiclosCompletos(0); // Não reseta o contador geral de ciclos da sessão aqui
   }, [cicloAtualPomodoro, getConfigPomodoro]);
 
   const atualizarConfigPomodoro = useCallback((novasConfigs: Partial<ConfigPomodoro>): void => {
-    setDados(prevDados => {
-      const confExistente = prevDados.configPomodoro || getConfigPomodoro();
+    setDados(prev => {
+      const confExistente = prev.configPomodoro || getConfigPomodoro();
       const configPomodoroAtualizada = { ...confExistente, ...novasConfigs };
       if (!pomodoroAtivo) {
         if (cicloAtualPomodoro === 'FOCO') setTempoRestantePomodoro(configPomodoroAtualizada.duracaoFocoMin * 60);
         else if (cicloAtualPomodoro === 'PAUSA_CURTA') setTempoRestantePomodoro(configPomodoroAtualizada.duracaoPausaCurtaMin * 60);
         else if (cicloAtualPomodoro === 'PAUSA_LONGA') setTempoRestantePomodoro(configPomodoroAtualizada.duracaoPausaLongaMin * 60);
       }
-      return { ...prevDados, configPomodoro: configPomodoroAtualizada };
+      return { ...prev, configPomodoro: configPomodoroAtualizada };
     });
     toast.success("Configurações do Pomodoro salvas!");
   }, [pomodoroAtivo, cicloAtualPomodoro, getConfigPomodoro]);
   
   const concluirTarefa = useCallback((tarefaParaConcluir: Tarefa): void => {
-    setDados(prevDados => {
-      const novosDados = JSON.parse(JSON.stringify(prevDados)) as DadosApp;
+    const todasSubTarefasConcluidas = tarefaParaConcluir.subTarefas?.every(st => st.completada) ?? true;
+    if (!todasSubTarefasConcluidas && (tarefaParaConcluir.subTarefas?.length || 0) > 0) {
+        toast.error("Conclua todas as sub-tarefas primeiro.", { description: "Ou remova as sub-tarefas pendentes para concluir a tarefa principal." });
+        return;
+    }
+    setDados(prev => {
+      const novosDados = JSON.parse(JSON.stringify(prev)) as DadosApp;
       const { categoriaId } = tarefaParaConcluir;
       if (novosDados.tarefas && novosDados.tarefas[categoriaId]) {
-        const tarefasDaCategoria = novosDados.tarefas[categoriaId];
-        const index = tarefasDaCategoria.findIndex(t => t.id === tarefaParaConcluir.id);
+        const index = novosDados.tarefas[categoriaId].findIndex(t => t.id === tarefaParaConcluir.id);
         if (index > -1) {
-          const [tarefaRemovida] = tarefasDaCategoria.splice(index, 1);
+          const [tarefaRemovida] = novosDados.tarefas[categoriaId].splice(index, 1);
           if (novosDados.progresso) {
             novosDados.progresso.totalTarefasConcluidas = (novosDados.progresso.totalTarefasConcluidas || 0) + 1;
             if (novosDados.progresso.tarefasConcluidasPorCategoria) {
@@ -178,10 +174,7 @@ export function usePainel() {
             novosDados.progresso.ultimaTarefaConcluida = new Date();
           }
           if(tarefaRemovida){
-            const tarefaConcluidaObj: TarefaConcluida = {
-                id: tarefaRemovida.id, texto: tarefaRemovida.texto, categoriaId: tarefaRemovida.categoriaId, 
-                concluidaEm: new Date(), alarme: tarefaRemovida.alarme, subTarefas: tarefaRemovida.subTarefas
-            };
+            const tarefaConcluidaObj: TarefaConcluida = { ...tarefaRemovida, concluidaEm: new Date() };
             novosDados.tarefasConcluidas = [...(novosDados.tarefasConcluidas || []), tarefaConcluidaObj];
           }
         }
@@ -190,99 +183,87 @@ export function usePainel() {
     });
   }, []);
 
-  const adicionarTarefa = useCallback((categoriaIdSelecionada: string, alarme?: string): void => {
-    if (textoNovaTarefa.trim() === "") { toast.error("O texto da tarefa não pode estar vazio."); return; }
-    if (!categoriaIdSelecionada || !dados.categorias || !dados.categorias[categoriaIdSelecionada]) { toast.error("Por favor, selecione uma categoria válida."); return; }
+  const adicionarTarefa = useCallback((categoriaIdSelecionada: string, alarme?: string, textoParam?: string, subTarefasIniciais?: SubTarefa[]): string | undefined => {
+    const textoFinalDaTarefa = textoParam || textoNovaTarefa;
+    if (textoFinalDaTarefa.trim() === "") { if(!textoParam) toast.error("O texto da tarefa não pode estar vazio."); return undefined; }
+    if (!categoriaIdSelecionada || !dados.categorias || !dados.categorias[categoriaIdSelecionada]) { if(!textoParam) toast.error("Por favor, selecione uma categoria válida."); return undefined; }
     const novaTarefa: Tarefa = {
       id: `tarefa_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      texto: textoNovaTarefa, categoriaId: categoriaIdSelecionada, criadaEm: new Date(), completada: false,
+      texto: textoFinalDaTarefa, categoriaId: categoriaIdSelecionada, criadaEm: new Date(), completada: false,
       alarme: alarme ? new Date(alarme) : undefined, 
-      subTarefas: [],
+      subTarefas: subTarefasIniciais || [],
     };
-    setDados(prevDados => {
-      const novosDados = JSON.parse(JSON.stringify(prevDados)) as DadosApp;
-      novosDados.tarefas = { ...novosDados.tarefas }; 
+    setDados(prev => {
+      const novosDados = JSON.parse(JSON.stringify(prev)) as DadosApp;
       if (!novosDados.tarefas[novaTarefa.categoriaId]) { novosDados.tarefas[novaTarefa.categoriaId] = []; }
       novosDados.tarefas[novaTarefa.categoriaId]?.unshift(novaTarefa); 
       return novosDados;
     });
     const categoriaInfo = dados.categorias[categoriaIdSelecionada];
-    toast.success(`Tarefa "${textoNovaTarefa}" adicionada na categoria ${categoriaInfo?.nome || categoriaIdSelecionada}!`);
-    setTextoNovaTarefa(''); setAlarmeNovaTarefa('');
+    if(!textoParam){ 
+        toast.success(`Tarefa "${textoFinalDaTarefa}" adicionada na categoria ${categoriaInfo?.nome || categoriaIdSelecionada}!`);
+        setTextoNovaTarefa(''); setAlarmeNovaTarefa('');
+    }
+    return novaTarefa.id;
   }, [textoNovaTarefa, alarmeNovaTarefa, dados.categorias]);
 
-  const editarTarefa = useCallback((
-    tarefaId: string, 
-    categoriaIdOriginal: string, 
-    novosDadosTarefa: Partial<Omit<Tarefa, 'id' | 'criadaEm'>>
-  ): void => {
-    setDados(prevDados => {
-      const dadosAtualizados = JSON.parse(JSON.stringify(prevDados)) as DadosApp;
-      const categoriaAlvoId = novosDadosTarefa.categoriaId || categoriaIdOriginal;
+  const editarTarefa = useCallback((tarefaId: string, categoriaIdOriginal: string, novosDadosTarefa: Partial<Omit<Tarefa, 'id' | 'criadaEm'>>): void => {
+    setDados(prev => {
+      const dadosAtualizados = JSON.parse(JSON.stringify(prev)) as DadosApp;
+      let categoriaOriginalReal = categoriaIdOriginal; 
+      const categoriaAlvoId = novosDadosTarefa.categoriaId || categoriaOriginalReal;
       let tarefaOriginal: Tarefa | undefined;
       let indexOriginal = -1;
-      let listaOriginalDaCategoriaOriginal = dadosAtualizados.tarefas[categoriaIdOriginal];
+      let listaDaCategoriaOriginalReal = dadosAtualizados.tarefas[categoriaOriginalReal];
 
-      if (listaOriginalDaCategoriaOriginal) {
-        indexOriginal = listaOriginalDaCategoriaOriginal.findIndex(t => t.id === tarefaId);
-        if (indexOriginal > -1) { tarefaOriginal = listaOriginalDaCategoriaOriginal[indexOriginal]; }
+      if (listaDaCategoriaOriginalReal) {
+        indexOriginal = listaDaCategoriaOriginalReal.findIndex(t => t.id === tarefaId);
+        if (indexOriginal > -1) { tarefaOriginal = listaDaCategoriaOriginalReal[indexOriginal]; }
       }
-      
-      if (!tarefaOriginal) { // Procura em todas se não achou na categoriaIdOriginal informada
+      if (!tarefaOriginal) {
         for (const catId of Object.keys(dadosAtualizados.tarefas)) {
+            if (catId === categoriaOriginalReal && listaDaCategoriaOriginalReal && indexOriginal > -1) continue; 
             const tarefasDaCat = dadosAtualizados.tarefas[catId] || [];
             const idx = tarefasDaCat.findIndex(t => t.id === tarefaId);
             if (idx > -1) {
-                tarefaOriginal = tarefasDaCat[idx];
-                categoriaIdOriginal = catId; // Atualiza qual era a categoria original real
-                listaOriginalDaCategoriaOriginal = tarefasDaCat;
-                indexOriginal = idx;
+                tarefaOriginal = tarefasDaCat[idx]; categoriaOriginalReal = catId; 
+                listaDaCategoriaOriginalReal = tarefasDaCat; indexOriginal = idx;
                 break;
             }
         }
       }
-      
-      if (!tarefaOriginal) {
-        toast.error("Erro: Tarefa original não encontrada para editar.");
-        return prevDados; 
-      }
+      if (!tarefaOriginal) { toast.error("Erro: Tarefa não encontrada para editar."); return prev; }
 
-      if (novosDadosTarefa.categoriaId && novosDadosTarefa.categoriaId !== categoriaIdOriginal) {
-        if(listaOriginalDaCategoriaOriginal && indexOriginal > -1) { 
-            listaOriginalDaCategoriaOriginal.splice(indexOriginal, 1); 
-        } else if (dadosAtualizados.tarefas[categoriaIdOriginal]) {
-             dadosAtualizados.tarefas[categoriaIdOriginal] = (dadosAtualizados.tarefas[categoriaIdOriginal] || []).filter(t => t.id !== tarefaId);
+      if (novosDadosTarefa.categoriaId && novosDadosTarefa.categoriaId !== categoriaOriginalReal) {
+        if(listaDaCategoriaOriginalReal && indexOriginal > -1) { 
+            listaDaCategoriaOriginalReal.splice(indexOriginal, 1); 
+        } else if (dadosAtualizados.tarefas[categoriaOriginalReal]) {
+             dadosAtualizados.tarefas[categoriaOriginalReal] = (dadosAtualizados.tarefas[categoriaOriginalReal] || []).filter(t => t.id !== tarefaId);
         }
       }
-
       const tarefaAtualizada: Tarefa = {
-        ...tarefaOriginal, 
-        ...novosDadosTarefa, 
+        ...tarefaOriginal, ...novosDadosTarefa, 
         alarme: novosDadosTarefa.alarme ? new Date(novosDadosTarefa.alarme) : undefined,
-        // Garante que subTarefas seja um array, mesmo que novosDadosTarefa.subTarefas seja undefined
         subTarefas: Array.isArray(novosDadosTarefa.subTarefas) ? novosDadosTarefa.subTarefas : (tarefaOriginal.subTarefas || []),
       };
-      
-      if (!dadosAtualizados.tarefas[categoriaAlvoId]) {
-        dadosAtualizados.tarefas[categoriaAlvoId] = [];
-      }
-      
+      if (!dadosAtualizados.tarefas[categoriaAlvoId]) { dadosAtualizados.tarefas[categoriaAlvoId] = []; }
       const indexNaCategoriaAlvo = dadosAtualizados.tarefas[categoriaAlvoId].findIndex(t => t.id === tarefaId);
-
       if (indexNaCategoriaAlvo > -1) { 
         dadosAtualizados.tarefas[categoriaAlvoId][indexNaCategoriaAlvo] = tarefaAtualizada;
       } else { 
+        if (categoriaAlvoId === categoriaOriginalReal && indexNaCategoriaAlvo === -1 && dadosAtualizados.tarefas[categoriaOriginalReal]) {
+             dadosAtualizados.tarefas[categoriaOriginalReal] = dadosAtualizados.tarefas[categoriaOriginalReal].filter(t => t.id !== tarefaId);
+        }
         dadosAtualizados.tarefas[categoriaAlvoId].unshift(tarefaAtualizada);
       }
-      
-      toast.success("Tarefa atualizada com sucesso!");
+      toast.success("Tarefa atualizada!");
       return dadosAtualizados;
     });
   }, []);
 
   const excluirTarefa = useCallback((tarefaId: string, categoriaIdDaTarefa: string): void => {
-    setDados(prevDados => {
-      const novosDados = JSON.parse(JSON.stringify(prevDados)) as DadosApp;
+    setDados(prev => {
+      const novosDados = JSON.parse(JSON.stringify(prev)) as DadosApp;
       if (novosDados.tarefas && novosDados.tarefas[categoriaIdDaTarefa]) {
         novosDados.tarefas[categoriaIdDaTarefa] = (novosDados.tarefas[categoriaIdDaTarefa] || []).filter(t => t.id !== tarefaId);
       }
@@ -291,27 +272,28 @@ export function usePainel() {
     toast.error("Tarefa excluída!");
   }, []);
 
-  const adicionarNovaCategoria = useCallback((nome: string, emoji: string, cor: string): void => {
-    if (nome.trim() === "" ) { toast.error("O nome da categoria é obrigatório."); return; }
+  const adicionarNovaCategoria = useCallback((nome: string, emoji: string, cor: string): string | undefined => {
+    if (nome.trim() === "" ) { toast.error("O nome da categoria é obrigatório."); return undefined; }
     const categoriasAtuais = dados.categorias ? Object.values(dados.categorias) : [];
     const nomeExistente = categoriasAtuais.find( (cat: Categoria) => cat.nome.toLowerCase() === nome.toLowerCase() );
-    if (nomeExistente) { toast.error(`A categoria "${nome}" já existe.`); return; }
+    if (nomeExistente) { toast.info(`Categoria "${nome}" já existe, usando a existente.`); return nomeExistente.id; }
     const novoIdCategoria = `cat_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
     const novaCategoria: Categoria = { id: novoIdCategoria, nome, emoji: emoji || '📁', cor: cor || '#718096', };
-    setDados(prevDados => {
-      const novosDados = JSON.parse(JSON.stringify(prevDados)) as DadosApp;
+    setDados(prev => {
+      const novosDados = JSON.parse(JSON.stringify(prev)) as DadosApp;
       novosDados.categorias = { ...(novosDados.categorias || {}), [novoIdCategoria]: novaCategoria };
-      if (novosDados.tarefas && novosDados.tarefas[novaCategoria.id] === undefined) {
+      if (novosDados.tarefas && typeof novosDados.tarefas === 'object' && novosDados.tarefas[novaCategoria.id] === undefined) {
           novosDados.tarefas[novaCategoria.id] = [];
       }
       return novosDados;
     });
     toast.success(`Categoria "${nome}" adicionada!`);
+    return novoIdCategoria;
   }, [dados.categorias]);
 
   const editarCategoria = useCallback((categoriaId: string, novosDetalhes: Partial<Omit<Categoria, 'id'>>): void => {
-    setDados(prevDados => {
-      const novosDados = JSON.parse(JSON.stringify(prevDados)) as DadosApp;
+    setDados(prev => {
+      const novosDados = JSON.parse(JSON.stringify(prev)) as DadosApp;
       if (novosDados.categorias && novosDados.categorias[categoriaId]) {
         if (novosDetalhes.nome && novosDetalhes.nome.trim() !== "") {
             const nomeExistenteEmOutra = Object.values(novosDados.categorias).find(
@@ -319,7 +301,7 @@ export function usePainel() {
             );
             if (nomeExistenteEmOutra) {
                 toast.error(`O nome de categoria "${novosDetalhes.nome}" já está em uso.`);
-                return prevDados; 
+                return prev; 
             }
         }
         novosDados.categorias[categoriaId] = { ...novosDados.categorias[categoriaId], ...novosDetalhes, };
@@ -330,14 +312,18 @@ export function usePainel() {
   }, []);
 
   const excluirCategoria = useCallback((categoriaIdParaExcluir: string): void => {
-    setDados(prevDados => {
-      const novosDados = JSON.parse(JSON.stringify(prevDados)) as DadosApp;
+    setDados(prev => {
+      const novosDados = JSON.parse(JSON.stringify(prev)) as DadosApp;
+      // Garante que progresso e tarefasConcluidasPorCategoria existam
+      novosDados.progresso = prev.progresso || { ...dadosIniciaisGlobais.current.progresso };
+      novosDados.progresso.tarefasConcluidasPorCategoria = novosDados.progresso.tarefasConcluidasPorCategoria || {};
+      
       if (novosDados.categorias) { delete novosDados.categorias[categoriaIdParaExcluir]; }
       if (novosDados.tarefas) { delete novosDados.tarefas[categoriaIdParaExcluir]; }
       if (novosDados.tarefasConcluidas) {
         novosDados.tarefasConcluidas = (novosDados.tarefasConcluidas || []).filter( tc => tc.categoriaId !== categoriaIdParaExcluir );
       }
-      if (novosDados.progresso && novosDados.progresso.tarefasConcluidasPorCategoria) {
+      if (novosDados.progresso.tarefasConcluidasPorCategoria) {
         delete novosDados.progresso.tarefasConcluidasPorCategoria[categoriaIdParaExcluir];
       }
       return novosDados;
@@ -380,8 +366,8 @@ export function usePainel() {
 
   const adicionarSubTarefa = useCallback((tarefaPaiId: string, categoriaId: string, textoSubTarefa: string): void => {
     if (textoSubTarefa.trim() === "") { toast.error("Sub-tarefa não pode ser vazia."); return; }
-    setDados(prevDados => {
-      const novosDados = JSON.parse(JSON.stringify(prevDados)) as DadosApp;
+    setDados(prev => {
+      const novosDados = JSON.parse(JSON.stringify(prev)) as DadosApp;
       if (novosDados.tarefas && novosDados.tarefas[categoriaId]) {
         const tarefaPaiIndex = novosDados.tarefas[categoriaId].findIndex(t => t.id === tarefaPaiId);
         if (tarefaPaiIndex > -1) {
@@ -392,17 +378,15 @@ export function usePainel() {
           };
           tarefaPai.subTarefas = [...(tarefaPai.subTarefas || []), novaSub];
           toast.success("Sub-tarefa adicionada!");
-        } else {
-          console.error("Tarefa pai não encontrada para adicionar sub-tarefa");
-        }
+        } else { console.error("Tarefa pai não encontrada para adicionar sub-tarefa"); }
       }
       return novosDados;
     });
   }, []);
 
   const alternarCompletarSubTarefa = useCallback((tarefaPaiId: string, categoriaId: string, subTarefaId: string): void => {
-    setDados(prevDados => {
-      const novosDados = JSON.parse(JSON.stringify(prevDados)) as DadosApp;
+    setDados(prev => {
+      const novosDados = JSON.parse(JSON.stringify(prev)) as DadosApp;
       if (novosDados.tarefas && novosDados.tarefas[categoriaId]) {
         const tarefaPaiIndex = novosDados.tarefas[categoriaId].findIndex(t => t.id === tarefaPaiId);
         if (tarefaPaiIndex > -1 && novosDados.tarefas[categoriaId][tarefaPaiIndex].subTarefas) {
@@ -418,8 +402,8 @@ export function usePainel() {
   }, []);
 
   const excluirSubTarefa = useCallback((tarefaPaiId: string, categoriaId: string, subTarefaId: string): void => {
-    setDados(prevDados => {
-      const novosDados = JSON.parse(JSON.stringify(prevDados)) as DadosApp;
+    setDados(prev => {
+      const novosDados = JSON.parse(JSON.stringify(prev)) as DadosApp;
       if (novosDados.tarefas && novosDados.tarefas[categoriaId]) {
         const tarefaPaiIndex = novosDados.tarefas[categoriaId].findIndex(t => t.id === tarefaPaiId);
         if (tarefaPaiIndex > -1 && novosDados.tarefas[categoriaId][tarefaPaiIndex].subTarefas) {
@@ -431,7 +415,6 @@ export function usePainel() {
       return novosDados;
     });
   }, []);
-
 
   return {
     dados, carregando, concluirTarefa, adicionarTarefa, excluirTarefa, editarTarefa,

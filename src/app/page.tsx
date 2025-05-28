@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react'; // useEffect pode ser usado para outras lógicas se necessário
+import { useState, useMemo, useCallback, useEffect } from 'react'; // Adicionado useCallback e useEffect
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { 
@@ -13,9 +13,11 @@ import {
 import { 
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue 
 } from "@/components/ui/select";
-import { RefreshCw, PlusCircle, Trash2, Edit3, Sun, Moon, CheckCircle, Settings2, Save, RotateCcw, Play, Pause, ChevronDown, ChevronUp, Plus, X } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { RefreshCw, PlusCircle, Trash2, Edit3, Sun, Moon, Sparkles, X, Plus, SmilePlus } from "lucide-react";
 import { toast } from "sonner";
 import { useTheme } from "next-themes";
+import EmojiPicker, { EmojiClickData, Theme as EmojiTheme, SkinTones } from 'emoji-picker-react';
 
 import { usePainel } from "@/lib/use-painel";
 import PainelTarefa from "@/components/painel-tarefa";
@@ -28,14 +30,30 @@ import type { Tarefa, Categoria as CategoriaInfo, ConfigPomodoro, SubTarefa } fr
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 
 import 'react-big-calendar/lib/css/react-big-calendar.css';
+import { Views, type View, type NavigateAction } from 'react-big-calendar';
+
 
 const EMOJIS_SUGERIDOS = ['📁', '🏠', '🎓', '💼', '💪', '❤️', '🎉', '💡', '💰', '✈️', '🍽️', '📚', '🛠️', '✨', '🎯', '🤔', '😊', '🔥'];
 
+interface IaParsedTask {
+  textoTarefa: string;
+  dataHora?: string; 
+  subTarefas: string[];
+}
+interface IaParsedCategory {
+  nomeCategoria: string;
+  tarefas: IaParsedTask[];
+}
+interface IaApiResponse {
+  categorias?: IaParsedCategory[];
+}
+
 export default function PaginaPrincipal() {
-  const { setTheme, theme } = useTheme();
+  const { setTheme, theme: currentTheme } = useTheme();
   const {
     dados, carregando, concluirTarefa, resetar: resetarGeralDoHook, obterTotalTarefas,
     jaConcluidoHoje, textoNovaTarefa, setTextoNovaTarefa, adicionarTarefa,
@@ -53,6 +71,7 @@ export default function PaginaPrincipal() {
   const [nomeNovaCat, setNomeNovaCat] = useState('');
   const [emojiNovaCat, setEmojiNovaCat] = useState(EMOJIS_SUGERIDOS[0]);
   const [corNovaCat, setCorNovaCat] = useState('#718096');
+  const [openEmojiPickerNovaCat, setOpenEmojiPickerNovaCat] = useState(false);
 
   const [tarefaParaEditar, setTarefaParaEditar] = useState<Tarefa | null>(null);
   const [textoEdicaoTarefa, setTextoEdicaoTarefa] = useState('');
@@ -67,6 +86,14 @@ export default function PaginaPrincipal() {
   const [emojiEdicaoCat, setEmojiEdicaoCat] = useState('');
   const [corEdicaoCat, setCorEdicaoCat] = useState('#718096');
   const [mostrarModalEdicaoCategoria, setMostrarModalEdicaoCategoria] = useState(false);
+  const [openEmojiPickerEdicaoCat, setOpenEmojiPickerEdicaoCat] = useState(false);
+
+  const [textoEmLoteParaIA, setTextoEmLoteParaIA] = useState<string>('');
+  const [processandoLoteComIA, setProcessandoLoteComIA] = useState(false);
+  
+  const [dataAtualCalendario, setDataAtualCalendario] = useState(new Date());
+  const [visualizacaoAtualCalendario, setVisualizacaoAtualCalendario] = useState<View>(Views.MONTH);
+
 
   const calendarEvents = useMemo((): CalendarEvent[] => {
     if (!dados || !dados.tarefas || typeof dados.tarefas !== 'object' || !dados.categorias) return [];
@@ -96,7 +123,7 @@ export default function PaginaPrincipal() {
   const todasTarefasDoPainelConcluidas = totalTarefasAtivas === 0 && !carregando && dados.categorias && Object.keys(dados.categorias).length > 0; 
   const venceuPeloMenosUmaHoje = jaConcluidoHoje();
   
-  const handleAbrirModalEditarTarefa = (tarefa: Tarefa) => {
+  const handleAbrirModalEditarTarefa = useCallback((tarefa: Tarefa):void => {
     setTarefaParaEditar(tarefa);
     setTextoEdicaoTarefa(tarefa.texto);
     setCategoriaEdicaoTarefa(tarefa.categoriaId);
@@ -110,9 +137,9 @@ export default function PaginaPrincipal() {
         } else { setAlarmeEdicaoTarefa(''); }
     } else { setAlarmeEdicaoTarefa(''); }
     setMostrarModalEdicaoTarefa(true);
-  };
+  }, []);
 
-  const handleSalvarEdicaoTarefa = (): void => {
+  const handleSalvarEdicaoTarefa = useCallback((): void => {
     if (!tarefaParaEditar) return;
     if (textoEdicaoTarefa.trim() === "") { toast.error("O texto da tarefa não pode ser vazio."); return; }
     if (!categoriaEdicaoTarefa) { toast.error("Por favor, selecione uma categoria."); return; }
@@ -123,30 +150,32 @@ export default function PaginaPrincipal() {
       subTarefas: subTarefasEdicao, 
     });
     setMostrarModalEdicaoTarefa(false); setTarefaParaEditar(null); setTextoNovaSubTarefaEdicao('');
-  };
+  }, [tarefaParaEditar, textoEdicaoTarefa, categoriaEdicaoTarefa, alarmeEdicaoTarefa, subTarefasEdicao, editarTarefa]);
   
-  const handleAdicionarSubTarefaEdicao = () => {
+  const handleAdicionarSubTarefaEdicao = useCallback(():void => {
     if (!tarefaParaEditar || textoNovaSubTarefaEdicao.trim() === '') return;
     const novaSub: SubTarefa = { id: `sub_edit_${Date.now()}`, texto: textoNovaSubTarefaEdicao, completada: false };
     setSubTarefasEdicao(prev => [...prev, novaSub]);
     setTextoNovaSubTarefaEdicao('');
-  };
-  const handleToggleSubTarefaEdicao = (subId: string) => {
-    setSubTarefasEdicao(prev => prev.map(sub => sub.id === subId ? {...sub, completada: !sub.completada} : sub));
-  };
-  const handleExcluirSubTarefaEdicao = (subId: string) => {
-    setSubTarefasEdicao(prev => prev.filter(sub => sub.id !== subId));
-  };
+  }, [tarefaParaEditar, textoNovaSubTarefaEdicao]);
 
-  const handleAbrirModalEditarCategoria = (categoria: CategoriaInfo) => {
+  const handleToggleSubTarefaEdicao = useCallback((subId: string):void => {
+    setSubTarefasEdicao(prev => prev.map(sub => sub.id === subId ? {...sub, completada: !sub.completada} : sub));
+  }, []);
+
+  const handleExcluirSubTarefaEdicao = useCallback((subId: string):void => {
+    setSubTarefasEdicao(prev => prev.filter(sub => sub.id !== subId));
+  }, []);
+
+  const handleAbrirModalEditarCategoria = useCallback((categoria: CategoriaInfo):void => {
     setCategoriaParaEditar(categoria);
     setNomeEdicaoCat(categoria.nome);
     setEmojiEdicaoCat(categoria.emoji);
     setCorEdicaoCat(categoria.cor);
     setMostrarModalEdicaoCategoria(true);
-  };
+  }, []);
 
-  const handleSalvarEdicaoCategoria = (): void => {
+  const handleSalvarEdicaoCategoria = useCallback((): void => {
     if (!categoriaParaEditar) return;
     if (nomeEdicaoCat.trim() === "") { toast.error("O nome da categoria não pode ser vazio."); return; }
     editarCategoria(categoriaParaEditar.id, {
@@ -156,9 +185,9 @@ export default function PaginaPrincipal() {
     });
     setMostrarModalEdicaoCategoria(false);
     setCategoriaParaEditar(null);
-  };
+  }, [categoriaParaEditar, nomeEdicaoCat, emojiEdicaoCat, corEdicaoCat, editarCategoria]);
 
-  const handleConcluirTarefa = (tarefa: Tarefa): void => {
+  const handleConcluirTarefa = useCallback((tarefa: Tarefa): void => {
     concluirTarefa(tarefa);
     setTarefaConcluidaTexto(tarefa.texto);
     setMostrarParabensIndividual(true);
@@ -170,41 +199,191 @@ export default function PaginaPrincipal() {
       setMostrarParabensIndividual(false);
       setTarefaConcluidaTexto('');
     }, 3000);
-  };
+  }, [concluirTarefa]);
 
-  const handleResetPainel = (): void => { 
+  const handleResetPainel = useCallback((): void => { 
     resetarGeralDoHook(); 
     toast.success("Painel resetado!", { 
       description: "Todas as tarefas e categorias foram restauradas para o estado padrão.",
     });
-  }; 
+  }, [resetarGeralDoHook]); 
 
-  const handleAdicionarComCategoria = (): void => {
+  const handleAdicionarComCategoria = useCallback((): void => {
     if (textoNovaTarefa.trim() === "") { toast.error("O texto da tarefa não pode estar vazio."); return; }
     if (categoriaSelecionada) {
-      adicionarTarefa(categoriaSelecionada, alarmeNovaTarefa || undefined);
+      adicionarTarefa(categoriaSelecionada, alarmeNovaTarefa || undefined, textoNovaTarefa);
       setTextoNovaTarefa(''); 
       setAlarmeNovaTarefa(''); 
     } else {
       toast.error("Por favor, selecione uma categoria.");
     }
-  };
+  }, [adicionarTarefa, textoNovaTarefa, categoriaSelecionada, alarmeNovaTarefa]);
 
-  const handleCriarNovaCategoria = (): void => {
+  const handleCriarNovaCategoria = useCallback((): void => {
     if (nomeNovaCat.trim()) {
       adicionarNovaCategoria(nomeNovaCat, emojiNovaCat || '📁', corNovaCat || '#718096');
       setNomeNovaCat('');
-      setEmojiNovaCat(EMOJIS_SUGERIDOS[0]);
+      setEmojiNovaCat(EMOJIS_SUGERIDOS[0]); 
       setCorNovaCat('#718096');
     } else {
       toast.error("O nome da categoria é obrigatório.");
     }
-  };
+  }, [adicionarNovaCategoria, nomeNovaCat, emojiNovaCat, corNovaCat]);
+  
+  const onEmojiClickNovaCat = useCallback((emojiData: EmojiClickData) => {
+    setEmojiNovaCat(emojiData.emoji);
+    setOpenEmojiPickerNovaCat(false);
+  }, []);
+
+  const onEmojiClickEdicaoCat = useCallback((emojiData: EmojiClickData) => {
+    setEmojiEdicaoCat(emojiData.emoji);
+    setOpenEmojiPickerEdicaoCat(false);
+  }, []);
+
+  const handleAdicionarTarefasEmLoteComIA = useCallback(async (): Promise<void> => {
+    if (!textoEmLoteParaIA.trim()) {
+      toast.error("Cole o texto do seu plano de estudos ou lista de tarefas.");
+      return;
+    }
+    setProcessandoLoteComIA(true);
+    const processingToastId = toast.loading("Processando seu texto com a IA...");
+
+    try {
+      const response = await fetch('/api/processar-texto-ia', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ texto: textoEmLoteParaIA }),
+      });
+
+      toast.dismiss(processingToastId);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error("Erro da API ao processar texto:", errorData);
+        toast.error("Falha ao processar com IA.", { description: errorData.error || `Erro do servidor: ${response.status}` });
+        setProcessandoLoteComIA(false);
+        return;
+      }
+
+      const resultadoIA = await response.json();
+      
+      let categoriasDaIA: IaParsedCategory[] = [];
+      if (Array.isArray(resultadoIA)) {
+        if (resultadoIA.every(item => typeof item.nomeCategoria === 'string' && Array.isArray(item.tarefas) && item.tarefas.every((t: any) => typeof t.textoTarefa === 'string' && Array.isArray(t.subTarefas)))) {
+            categoriasDaIA = resultadoIA as IaParsedCategory[];
+        } else {
+            console.error("Resposta da IA é um array, mas os itens não são IaParsedCategory válidos:", resultadoIA);
+        }
+      } else if (resultadoIA && Array.isArray((resultadoIA as IaApiResponse).categorias)) {
+        const categoriasTemp = (resultadoIA as IaApiResponse).categorias;
+        if (categoriasTemp && categoriasTemp.every(item => typeof item.nomeCategoria === 'string' && Array.isArray(item.tarefas) && item.tarefas.every((t: any) => typeof t.textoTarefa === 'string' && Array.isArray(t.subTarefas)))) {
+            categoriasDaIA = categoriasTemp;
+        } else {
+            console.error("Resposta da IA é um objeto com .categorias, mas os itens não são IaParsedCategory válidos:", resultadoIA);
+        }
+      }
+      
+      if (categoriasDaIA.length === 0 && textoEmLoteParaIA.trim() !== "") {
+        console.error("Não foi possível extrair categorias válidas da resposta da IA:", resultadoIA);
+        toast.error("A IA retornou um formato de dados inesperado ou vazio. Verifique o log do servidor.");
+        setProcessandoLoteComIA(false);
+        return;
+      }
+      
+      let totalCategoriasCriadasOuUsadas = 0;
+      let totalTarefasPrincipaisAdicionadas = 0;
+      let totalSubTarefasAdicionadas = 0;
+
+      for (const itemCategoria of categoriasDaIA) {
+        let categoriaIdFinal: string | undefined;
+        const nomeCategoriaLimpo = itemCategoria.nomeCategoria.trim();
+        const categoriaExistente = dados.categorias ? Object.values(dados.categorias).find(c => c.nome.toLowerCase() === nomeCategoriaLimpo.toLowerCase()) : undefined;
+        
+        if (categoriaExistente) {
+          categoriaIdFinal = categoriaExistente.id;
+        } else {
+          const emojiPadraoCat = EMOJIS_SUGERIDOS[Math.floor(Math.random() * EMOJIS_SUGERIDOS.length)];
+          const corPadraoCat = `#${Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')}`;
+          categoriaIdFinal = adicionarNovaCategoria(nomeCategoriaLimpo, emojiPadraoCat, corPadraoCat);
+        }
+        if (categoriaIdFinal) { 
+            if (!categoriaExistente) totalCategoriasCriadasOuUsadas++;
+            else totalCategoriasCriadasOuUsadas++;
+        } else {
+             console.warn(`Categoria "${nomeCategoriaLimpo}" não pôde ser criada ou encontrada.`);
+             continue;
+        }
+
+        for (const tarefaIA of itemCategoria.tarefas) {
+          if (tarefaIA.textoTarefa && typeof tarefaIA.textoTarefa === 'string' && tarefaIA.textoTarefa.trim() !== "") {
+            const subTarefasParaCriar: SubTarefa[] = (tarefaIA.subTarefas || []).map(textoSub => ({
+                id: `sub_ia_${Date.now()}_${Math.random().toString(36).substr(2,5)}`,
+                texto: textoSub.trim(),
+                completada: false,
+            })).filter(st => st.texto !== "");
+
+            const idTarefaPai = adicionarTarefa(
+                categoriaIdFinal, 
+                tarefaIA.dataHora, 
+                tarefaIA.textoTarefa.trim(), 
+                subTarefasParaCriar
+            );
+            
+            if (idTarefaPai) {
+              totalTarefasPrincipaisAdicionadas++;
+              totalSubTarefasAdicionadas += subTarefasParaCriar.length;
+            }
+          }
+        }
+      }
+
+      if (totalTarefasPrincipaisAdicionadas > 0) {
+        let message = `${totalTarefasPrincipaisAdicionadas} tarefas principais`;
+        if (totalSubTarefasAdicionadas > 0) { message += ` e ${totalSubTarefasAdicionadas} sub-tarefas`; }
+        message += " processadas pela IA!";
+        if (totalCategoriasCriadasOuUsadas > 0) { message += ` Em ${totalCategoriasCriadasOuUsadas} categorias.`;}
+        toast.success(message);
+      } else {
+        toast.info("Nenhuma tarefa principal foi extraída pela IA. Verifique o formato do texto ou o log do servidor.");
+      }
+      setTextoEmLoteParaIA('');
+
+    } catch (error) {
+      console.error("Erro na função handleAdicionarTarefasEmLoteComIA:", error);
+      toast.dismiss(processingToastId);
+      toast.error("Falha ao processar o texto com a IA.", {description: error instanceof Error ? error.message : "Erro desconhecido"});
+    } finally {
+      setProcessandoLoteComIA(false);
+    }
+  }, [textoEmLoteParaIA, adicionarNovaCategoria, adicionarTarefa, dados.categorias, adicionarSubTarefa]); // Adicionada adicionarSubTarefa às dependências
+
+  // Handlers para o Calendário
+  const handleNavigateCalendario = useCallback((newDate: Date, view: View, action: NavigateAction): void => {
+    setDataAtualCalendario(newDate);
+    setVisualizacaoAtualCalendario(view);
+  }, []);
+
+  const handleViewCalendario = useCallback((view: View): void => {
+    setVisualizacaoAtualCalendario(view);
+  }, []);
+  
+  const handleSelectSlotCalendario = useCallback((slotInfo: { start: Date, end: Date, slots: Date[] | string[], action: 'select' | 'click' | 'doubleClick' }): void => {
+    if (slotInfo.action === 'click' || slotInfo.action === 'select') {
+        const dataAlarmeFormatada = new Date(slotInfo.start.getTime() - (slotInfo.start.getTimezoneOffset() * 60000 )).toISOString().slice(0,16);
+        setAlarmeNovaTarefa(dataAlarmeFormatada);
+        toast.info("Alarme pré-preenchido em 'Adicionar Tarefa'.");
+        document.getElementById('categoria-tarefa')?.focus();
+    }
+  }, []);
+
+  const handleSelectEventCalendario = useCallback((event: CalendarEvent): void => {
+    if(event.resource) { handleAbrirModalEditarTarefa(event.resource as Tarefa); }
+  }, [handleAbrirModalEditarTarefa]); // Adicionada handleAbrirModalEditarTarefa como dependência
 
   const tarefasComNumeros: { tarefa: Tarefa; numero: number; categoria: CategoriaInfo }[] = [];
   let contador = 1;
 
-  if (dados && dados.tarefas && dados.categorias) {
+  if (dados && dados.tarefas && typeof dados.tarefas === 'object' && dados.categorias && typeof dados.categorias === 'object') {
     Object.keys(dados.tarefas).forEach(categoriaId => { 
       const categoriaInfo = dados.categorias[categoriaId];
       const tarefasDaCategoria = dados.tarefas[categoriaId] || [];
@@ -235,13 +414,7 @@ export default function PaginaPrincipal() {
     <div className="min-h-screen bg-background text-foreground">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-3xl">
         <div className="flex justify-end mb-4 print:hidden">
-            <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                aria-label="Mudar tema"
-                className="border-border"
-            >
+            <Button variant="outline" size="icon" onClick={() => setTheme(currentTheme === "dark" ? "light" : "dark")} aria-label="Mudar tema" className="border-border">
                 <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
                 <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
             </Button>
@@ -291,11 +464,25 @@ export default function PaginaPrincipal() {
                 <Input type="text" placeholder="Nome da Categoria (ex: Estudos)" value={nomeNovaCat} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNomeNovaCat(e.target.value)} />
                 <div className="grid grid-cols-3 gap-3 items-end">
                   <div className="col-span-2">
-                    <Label htmlFor="emoji-select-cat" className="text-xs font-medium mb-1 block">Emoji</Label>
-                    <Select value={emojiNovaCat} onValueChange={setEmojiNovaCat}>
-                      <SelectTrigger id="emoji-select-cat"><SelectValue placeholder="Ícone" /></SelectTrigger>
-                      <SelectContent>{EMOJIS_SUGERIDOS.map(emoji => (<SelectItem key={emoji} value={emoji} className="text-lg">{emoji}</SelectItem>))}</SelectContent>
-                    </Select>
+                    <Label htmlFor="emoji-nova-cat-btn" className="text-xs font-medium mb-1 block">Emoji</Label>
+                    <Popover open={openEmojiPickerNovaCat} onOpenChange={setOpenEmojiPickerNovaCat}>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" id="emoji-nova-cat-btn" className="w-full justify-start text-left font-normal">
+                          {emojiNovaCat ? <span className="text-lg mr-2">{emojiNovaCat}</span> : "Selecione"}
+                          <SmilePlus className="ml-auto h-4 w-4 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <EmojiPicker 
+                            onEmojiClick={onEmojiClickNovaCat} 
+                            autoFocusSearch={false}
+                            theme={currentTheme === 'dark' ? EmojiTheme.DARK : EmojiTheme.LIGHT}
+                            lazyLoadEmojis={true}
+                            defaultSkinTone={SkinTones.NEUTRAL}
+                            height={350}
+                        />
+                      </PopoverContent>
+                    </Popover>
                   </div>
                   <div>
                     <Label htmlFor="color-picker-cat" className="text-xs font-medium mb-1 block">Cor</Label>
@@ -343,6 +530,17 @@ export default function PaginaPrincipal() {
           </CardContent>
         </Card>
 
+        <Card className="mb-6 shadow-lg bg-card text-card-foreground border-border">
+          <CardHeader><CardTitle className="text-xl font-semibold">Adicionar Plano de Estudos/Tarefas (com IA ✨)</CardTitle></CardHeader>
+          <CardContent className="space-y-3">
+            <div><Label htmlFor="texto-lote-ia" className="text-xs font-medium">Cole seu plano de estudos ou lista de tarefas aqui:</Label><Textarea id="texto-lote-ia" value={textoEmLoteParaIA} onChange={(e) => setTextoEmLoteParaIA(e.target.value)} placeholder={"Exemplo:\nCategoria: Meus Estudos\nTarefa: Ler capítulo 1\n- Fazer resumo\n- Anotar dúvidas"} className="mt-1 w-full h-48 p-2 border rounded-md"/></div>
+            <p className="text-xs text-muted-foreground mt-1">Dica: Use "Categoria:", "Tarefa:", "Sub-tarefa:" ou "- " / "* " para ajudar a IA.</p>
+            <Button onClick={handleAdicionarTarefasEmLoteComIA} className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white" disabled={processandoLoteComIA || !textoEmLoteParaIA.trim()}>
+              {processandoLoteComIA ? "Processando com IA..." : <> <Sparkles className="w-4 h-4 mr-2" /> Processar com IA </> }
+            </Button>
+          </CardContent>
+        </Card>
+        
         {(mostrarParabensIndividual && !todasTarefasDoPainelConcluidas) && ( <div className="mb-6"><Parabens tarefaConcluida={tarefaConcluidaTexto}/></div>)}
         {todasTarefasDoPainelConcluidas && !carregando && ( <div className="mb-6"><Parabens todasConcluidas={true} onReset={handleResetPainel}/></div>)}
 
@@ -366,7 +564,17 @@ export default function PaginaPrincipal() {
         <Card className="mb-6 shadow-lg bg-card text-card-foreground border-border">
           <CardHeader><CardTitle className="text-xl font-semibold">Calendário de Tarefas</CardTitle></CardHeader>
           <CardContent>
-            {typeof window !== 'undefined' && <CalendarioTarefas events={calendarEvents} /> }
+            {typeof window !== 'undefined' && 
+                <CalendarioTarefas 
+                    events={calendarEvents} 
+                    currentDate={dataAtualCalendario}
+                    currentView={visualizacaoAtualCalendario}
+                    onNavigate={handleNavigateCalendario}
+                    onView={handleViewCalendario}
+                    onSelectEvent={handleSelectEventCalendario}
+                    onSelectSlot={handleSelectSlotCalendario}
+                /> 
+            }
           </CardContent>
         </Card>
 
@@ -428,11 +636,26 @@ export default function PaginaPrincipal() {
               <DialogHeader><DialogTitle>Editar Categoria</DialogTitle><DialogDescription>Altere o nome, emoji ou cor.</DialogDescription></DialogHeader>
               <div className="grid gap-4 py-4">
                 <div className="grid grid-cols-4 items-center gap-4"><Label htmlFor="nomeEdicaoCatModal" className="text-right">Nome</Label><Input id="nomeEdicaoCatModal" value={nomeEdicaoCat} onChange={(e) => setNomeEdicaoCat(e.target.value)} className="col-span-3"/></div>
-                <div className="grid grid-cols-4 items-center gap-4"><Label htmlFor="emojiEdicaoCatModal" className="text-right">Emoji</Label>
-                    <Select value={emojiEdicaoCat} onValueChange={setEmojiEdicaoCat}>
-                        <SelectTrigger id="emojiEdicaoCatModal" className="col-span-3"><SelectValue /></SelectTrigger>
-                        <SelectContent>{EMOJIS_SUGERIDOS.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent>
-                    </Select>
+                <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="emojiEdicaoCatModal" className="text-right">Emoji</Label>
+                    <Popover open={openEmojiPickerEdicaoCat} onOpenChange={setOpenEmojiPickerEdicaoCat}>
+                        <PopoverTrigger asChild>
+                            <Button variant="outline" id="emojiEdicaoCatModal" className="col-span-3 justify-start text-left font-normal">
+                                {emojiEdicaoCat ? <span className="text-lg mr-2">{emojiEdicaoCat}</span> : "Selecione"}
+                                <SmilePlus className="ml-auto h-4 w-4 opacity-50" />
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                            <EmojiPicker 
+                                onEmojiClick={onEmojiClickEdicaoCat} 
+                                autoFocusSearch={false}
+                                theme={currentTheme === 'dark' ? EmojiTheme.DARK : EmojiTheme.LIGHT}
+                                lazyLoadEmojis={true}
+                                defaultSkinTone={SkinTones.NEUTRAL}
+                                height={350}
+                            />
+                        </PopoverContent>
+                    </Popover>
                 </div>
                 <div className="grid grid-cols-4 items-center gap-4"><Label htmlFor="corEdicaoCatModal" className="text-right">Cor</Label><Input id="corEdicaoCatModal" type="color" value={corEdicaoCat} onChange={(e) => setCorEdicaoCat(e.target.value)} className="col-span-3 h-10 p-1 cursor-pointer"/></div>
               </div>
