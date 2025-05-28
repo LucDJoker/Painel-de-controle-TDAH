@@ -52,7 +52,7 @@ interface IaApiResponse {
   categorias?: IaParsedCategory[];
   // Permite também que a resposta seja diretamente o array de categorias
   [index: number]: IaParsedCategory; 
-  length?: number; // Para que Array.isArray funcione com esse tipo
+  length?: number; 
 }
 
 export default function PaginaPrincipal() {
@@ -70,6 +70,7 @@ export default function PaginaPrincipal() {
   const [tarefaConcluidaTexto, setTarefaConcluidaTexto] = useState<string>('');
   const [mostrarParabensIndividual, setMostrarParabensIndividual] = useState(false);
   const [categoriaSelecionada, setCategoriaSelecionada] = useState<string>(''); 
+  
   const [nomeNovaCat, setNomeNovaCat] = useState('');
   const [emojiNovaCat, setEmojiNovaCat] = useState(EMOJIS_SUGERIDOS[0]);
   const [corNovaCat, setCorNovaCat] = useState('#718096');
@@ -243,23 +244,24 @@ export default function PaginaPrincipal() {
     setOpenEmojiPickerEdicaoCat(false);
   }, []);
 
-  // Helper para verificar a estrutura de uma tarefa da IA
+  // Helper para verificar a estrutura de uma tarefa da IA (evitando 'any')
   const isValidIaTask = (task: unknown): task is IaParsedTask => {
-    return typeof task === 'object' && task !== null &&
-           'textoTarefa' in task && typeof (task as IaParsedTask).textoTarefa === 'string' &&
-           'subTarefas' in task && Array.isArray((task as IaParsedTask).subTarefas) &&
-           (task as IaParsedTask).subTarefas.every((s: unknown) => typeof s === 'string') &&
-           ('dataHora' in task ? typeof (task as IaParsedTask).dataHora === 'string' : true); // dataHora é opcional
+    const t = task as IaParsedTask; // Cast para acesso seguro às propriedades
+    return typeof t === 'object' && t !== null &&
+           'textoTarefa' in t && typeof t.textoTarefa === 'string' &&
+           'subTarefas' in t && Array.isArray(t.subTarefas) &&
+           t.subTarefas.every((s: unknown) => typeof s === 'string') &&
+           ('dataHora' in t ? typeof t.dataHora === 'string' || t.dataHora === undefined : true);
   };
 
-  // Helper para verificar a estrutura de uma categoria da IA
+  // Helper para verificar a estrutura de uma categoria da IA (evitando 'any')
   const isValidIaCategory = (item: unknown): item is IaParsedCategory => {
-    return typeof item === 'object' && item !== null &&
-           'nomeCategoria' in item && typeof (item as IaParsedCategory).nomeCategoria === 'string' &&
-           'tarefas' in item && Array.isArray((item as IaParsedCategory).tarefas) &&
-           (item as IaParsedCategory).tarefas.every(isValidIaTask);
+    const cat = item as IaParsedCategory; // Cast para acesso seguro
+    return typeof cat === 'object' && cat !== null &&
+           'nomeCategoria' in cat && typeof cat.nomeCategoria === 'string' &&
+           'tarefas' in cat && Array.isArray(cat.tarefas) &&
+           cat.tarefas.every(isValidIaTask);
   };
-
 
   const handleAdicionarTarefasEmLoteComIA = useCallback(async (): Promise<void> => {
     if (!textoEmLoteParaIA.trim()) {
@@ -280,22 +282,37 @@ export default function PaginaPrincipal() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        console.error("Erro da API ao processar texto:", errorData);
+        console.error("Erro da API ao processar texto:", errorData); // Log para ver o erro
         toast.error("Falha ao processar com IA.", { description: errorData.error || `Erro do servidor: ${response.status}` });
         setProcessandoLoteComIA(false);
         return;
       }
 
-      const resultadoIA = await response.json();
+      const resultadoIA = await response.json() as IaApiResponse | IaParsedCategory[]; // Pode ser um ou outro
+      
+      // ADICIONANDO LOGS DE DEBUG AQUI
+      console.log("### DEBUG: Resposta COMPLETA da API Route (resultadoIA):", JSON.stringify(resultadoIA, null, 2));
+      if (Array.isArray(resultadoIA) && resultadoIA.length > 0) {
+          console.log("### DEBUG: PRIMEIRO item do array resultadoIA:", JSON.stringify(resultadoIA[0], null, 2));
+          const firstCategory = resultadoIA[0] as IaParsedCategory; // Type assertion
+          if (firstCategory.tarefas && Array.isArray(firstCategory.tarefas) && firstCategory.tarefas.length > 0) {
+              console.log("### DEBUG: PRIMEIRA tarefa do PRIMEIRO item:", JSON.stringify(firstCategory.tarefas[0], null, 2));
+          }
+      } else if (resultadoIA && typeof resultadoIA === 'object' && 'categorias' in resultadoIA && Array.isArray(resultadoIA.categorias) && resultadoIA.categorias.length > 0) {
+          console.log("### DEBUG: PRIMEIRO item de resultadoIA.categorias:", JSON.stringify(resultadoIA.categorias[0], null, 2));
+          const firstCategory = resultadoIA.categorias[0] as IaParsedCategory; // Type assertion
+          if (firstCategory.tarefas && Array.isArray(firstCategory.tarefas) && firstCategory.tarefas.length > 0) {
+            console.log("### DEBUG: PRIMEIRA tarefa do PRIMEIRO item (aninhado):", JSON.stringify(firstCategory.tarefas[0], null, 2));
+          }
+      }
       
       let categoriasDaIA: IaParsedCategory[] = [];
-      
       if (Array.isArray(resultadoIA) && resultadoIA.every(isValidIaCategory)) {
         categoriasDaIA = resultadoIA;
-      } else if (resultadoIA && typeof resultadoIA === 'object' && 'categorias' in resultadoIA && Array.isArray(resultadoIA.categorias) && resultadoIA.categorias.every(isValidIaCategory)) {
-        categoriasDaIA = resultadoIA.categorias;
+      } else if (resultadoIA && typeof resultadoIA === 'object' && 'categorias' in resultadoIA && Array.isArray((resultadoIA as IaApiResponse).categorias) && (resultadoIA as IaApiResponse).categorias!.every(isValidIaCategory)) {
+        categoriasDaIA = (resultadoIA as IaApiResponse).categorias!;
       } else {
-        console.error("Resposta da IA não está no formato esperado:", resultadoIA);
+        console.error("Resposta da IA não está no formato esperado (após validação):", resultadoIA); // Modificado o log aqui
         toast.error("A IA retornou um formato de dados inesperado. Verifique o log do servidor.");
         setProcessandoLoteComIA(false);
         return;
