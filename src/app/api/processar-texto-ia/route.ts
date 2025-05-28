@@ -2,7 +2,6 @@
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { NextRequest, NextResponse } from 'next/server';
 
-// Pega a chave da API das variáveis de ambiente
 const GEMINI_API_KEY = process.env.GOOGLE_GEMINI_API_KEY;
 
 const safetySettings = [
@@ -13,7 +12,6 @@ const safetySettings = [
 ];
 
 export async function POST(request: NextRequest) {
-  // Verifica se a chave da API foi carregada corretamente
   if (!GEMINI_API_KEY) {
     const errorMessage = "Chave da API do Gemini não configurada no servidor.";
     console.error(`[API Rota ERRO CRÍTICO] ${errorMessage} Verifique as variáveis de ambiente .env.local e da Vercel.`);
@@ -23,7 +21,7 @@ export async function POST(request: NextRequest) {
   try {
     const reqBody = await request.json();
     const textoParaProcessar: string = reqBody.texto;
-    const hojeISO = new Date().toISOString(); // Para dar contexto de data à IA
+    const hojeISO = new Date().toISOString();
 
     if (!textoParaProcessar || typeof textoParaProcessar !== 'string' || textoParaProcessar.trim() === "") {
       return NextResponse.json({ error: "Texto para processar é obrigatório e não pode ser vazio." }, { status: 400 });
@@ -31,11 +29,11 @@ export async function POST(request: NextRequest) {
 
     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({ 
-        model: "gemini-1.5-flash-latest", // Modelo mais recente e rápido
+        model: "gemini-1.5-flash-latest",
         safetySettings,
         generationConfig: {
-            responseMimeType: "application/json", // Pede explicitamente JSON
-            // temperature: 0.3, // Para respostas mais determinísticas e estruturadas
+            responseMimeType: "application/json",
+            // temperature: 0.2 // Tentar uma temperatura mais baixa para JSON mais preciso
         }
     });
 
@@ -59,7 +57,7 @@ export async function POST(request: NextRequest) {
       
       Se não houver categorias explícitas, mas houver uma lista de tarefas, coloque todas sob uma categoria "Geral".
       Se uma tarefa não tiver data/hora explícita ou se a data/hora não puder ser interpretada como uma data futura ou válida baseada em ${hojeISO}, não inclua o campo "dataHora" para essa tarefa.
-      Certifique-se de que a saída seja um JSON válido e nada mais. Não inclua nenhuma explicação ou texto adicional antes ou depois do JSON.
+      Certifique-se de que a saída seja um JSON válido e nada mais. Não inclua nenhuma explicação ou texto adicional antes ou depois do JSON. Não coloque o JSON dentro de blocos de markdown como \`\`\`json ... \`\`\`.
 
       Exemplo de Texto de Entrada:
       Categoria: Estudos
@@ -97,26 +95,43 @@ export async function POST(request: NextRequest) {
     const result = await model.generateContent(prompt);
     const response = result.response;
     
-    // Verifica se há candidatos e se o primeiro tem conteúdo
     if (!response.candidates || !response.candidates[0] || !response.candidates[0].content || !response.candidates[0].content.parts || !response.candidates[0].content.parts[0]) {
-        console.error("[API Rota IA] Resposta da IA não contém a estrutura esperada (candidates/content/parts). Resposta completa:", JSON.stringify(response, null, 2));
+        console.error("[API Rota IA] Resposta da IA não contém a estrutura esperada. Resposta completa:", JSON.stringify(response, null, 2));
         return NextResponse.json({ error: "A IA retornou uma resposta vazia ou malformada.", iaResponse: response }, { status: 500 });
     }
     
-    const textResponse = response.candidates[0].content.parts[0].text || ""; // Pega o texto da primeira parte
+    const textResponse = response.candidates[0].content.parts[0].text || "";
     
     console.log("[API Rota IA] Resposta da IA (texto bruto):", textResponse);
 
+    // --- LÓGICA DE LIMPEZA DE JSON MELHORADA ---
     let jsonString = textResponse.trim();
-    // Tentativa mais robusta de limpar o JSON, caso a IA adicione markdown
-    const jsonMatch = jsonString.match(/(\[[\s\S]*\]|\{[\s\S]*\})/);
-    if (jsonMatch && jsonMatch[0]) {
-        jsonString = jsonMatch[0];
+    const startIndex = jsonString.indexOf('[');
+    const endIndex = jsonString.lastIndexOf(']');
+
+    if (startIndex !== -1 && endIndex !== -1 && endIndex > startIndex) {
+        jsonString = jsonString.substring(startIndex, endIndex + 1);
     } else {
-        console.error("[API Rota IA] Não foi possível extrair um JSON válido da resposta da IA. Resposta bruta:", textResponse);
-        return NextResponse.json({ error: "A IA não retornou um JSON reconhecível.", iaResponse: textResponse }, { status: 500 });
+        // Tenta encontrar um objeto JSON se não for um array
+        const startObjIndex = jsonString.indexOf('{');
+        const endObjIndex = jsonString.lastIndexOf('}');
+        if (startObjIndex !== -1 && endObjIndex !== -1 && endObjIndex > startObjIndex) {
+            jsonString = jsonString.substring(startObjIndex, endObjIndex + 1);
+             // Se for um objeto, mas esperamos um array, envolvemos ele em um array
+            try {
+                JSON.parse(jsonString); // Verifica se é um objeto JSON válido
+                if(!jsonString.trim().startsWith("[")){ // Se não for já um array
+                    jsonString = `[${jsonString}]`; 
+                }
+            } catch (e) {
+                // Não faz nada se não for um objeto JSON válido, o parse abaixo vai falhar e logar
+            }
+        } else {
+            console.error("[API Rota IA] Não foi possível extrair um JSON válido (array ou objeto) da resposta da IA. Resposta bruta:", textResponse);
+            return NextResponse.json({ error: "A IA não retornou um JSON reconhecível.", iaResponse: textResponse }, { status: 500 });
+        }
     }
-    
+    // --- FIM DA LÓGICA DE LIMPEZA ---
 
     try {
       const dadosEstruturados = JSON.parse(jsonString);
@@ -125,8 +140,8 @@ export async function POST(request: NextRequest) {
     } catch (parseError: unknown) { 
       const errorMessage = parseError instanceof Error ? parseError.message : "Erro de parse desconhecido";
       console.error("[API Rota IA] Erro ao parsear JSON da IA:", errorMessage);
-      console.error("[API Rota IA] String que causou o erro de parse:", jsonString);
-      return NextResponse.json({ error: "A IA retornou um formato que não é JSON válido.", iaResponse: jsonString, parseError: errorMessage }, { status: 500 });
+      console.error("[API Rota IA] String que causou o erro de parse (após tentativa de limpeza):", jsonString);
+      return NextResponse.json({ error: "A IA retornou um formato que não é JSON válido após limpeza.", iaResponse: textResponse, cleanedIaResponse: jsonString, parseError: errorMessage }, { status: 500 });
     }
 
   } catch (error: unknown) { 
@@ -144,7 +159,7 @@ export async function POST(request: NextRequest) {
             errorDetails = errAsObject.response.data as Record<string, unknown>;
         } else if (errAsObject.cause) {
             errorDetails = errAsObject.cause as Record<string, unknown>;
-        } else if (errAsObject.message) { // Algumas APIs de erro da Google podem ter a mensagem aqui
+        } else if (errAsObject.message) { 
             errorMessage = errAsObject.message;
         }
     }
