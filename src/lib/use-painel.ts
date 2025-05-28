@@ -142,6 +142,7 @@ export function usePainel() {
     if (cicloAtualPomodoro === 'FOCO') setTempoRestantePomodoro(confPomo.duracaoFocoMin * 60);
     else if (cicloAtualPomodoro === 'PAUSA_CURTA') setTempoRestantePomodoro(confPomo.duracaoPausaCurtaMin * 60);
     else if (cicloAtualPomodoro === 'PAUSA_LONGA') setTempoRestantePomodoro(confPomo.duracaoPausaLongaMin * 60);
+    setCiclosCompletos(0); // Reseta o contador de ciclos da sessão
   }, [cicloAtualPomodoro, getConfigPomodoro]);
 
   const atualizarConfigPomodoro = useCallback((novasConfigs: Partial<ConfigPomodoro>): void => {
@@ -161,13 +162,15 @@ export function usePainel() {
   const concluirTarefa = useCallback((tarefaParaConcluir: Tarefa): void => {
     const todasSubTarefasConcluidas = tarefaParaConcluir.subTarefas?.every(st => st.completada) ?? true;
     if (!todasSubTarefasConcluidas && (tarefaParaConcluir.subTarefas?.length || 0) > 0) {
-        toast.error("Conclua todas as sub-tarefas primeiro.", { description: "Ou remova as sub-tarefas pendentes para concluir a tarefa principal." });
+        toast.error("Conclua todas as sub-tarefas primeiro.", {
+            description: "Ou remova as sub-tarefas pendentes para concluir a tarefa principal."
+        });
         return;
     }
     setDados(prev => {
       const novosDados = JSON.parse(JSON.stringify(prev)) as DadosApp;
       const { categoriaId } = tarefaParaConcluir;
-      if (novosDados.tarefas && typeof novosDados.tarefas === 'object' && novosDados.tarefas[categoriaId]) {
+      if (novosDados.tarefas && novosDados.tarefas[categoriaId]) { // Garante que tarefas[categoriaId] existe
         const index = novosDados.tarefas[categoriaId].findIndex(t => t.id === tarefaParaConcluir.id);
         if (index > -1) {
           const [tarefaRemovida] = novosDados.tarefas[categoriaId].splice(index, 1);
@@ -175,6 +178,8 @@ export function usePainel() {
             novosDados.progresso.totalTarefasConcluidas = (novosDados.progresso.totalTarefasConcluidas || 0) + 1;
             if (novosDados.progresso.tarefasConcluidasPorCategoria && typeof novosDados.progresso.tarefasConcluidasPorCategoria === 'object') {
                 novosDados.progresso.tarefasConcluidasPorCategoria[categoriaId] = (novosDados.progresso.tarefasConcluidasPorCategoria[categoriaId] || 0) + 1;
+            } else if (novosDados.progresso) { // Garante que tarefasConcluidasPorCategoria existe
+                novosDados.progresso.tarefasConcluidasPorCategoria = { [categoriaId]: 1 };
             }
             novosDados.progresso.ultimaTarefaConcluida = new Date();
           }
@@ -212,7 +217,7 @@ export function usePainel() {
         setTextoNovaTarefa(''); setAlarmeNovaTarefa('');
     }
     return novaTarefa.id;
-  }, [textoNovaTarefa, alarmeNovaTarefa, dados.categorias]);
+  }, [textoNovaTarefa, alarmeNovaTarefa, dados.categorias, setTextoNovaTarefa, setAlarmeNovaTarefa]);
 
   const editarTarefa = useCallback((tarefaId: string, categoriaIdOriginal: string, novosDadosTarefa: Partial<Omit<Tarefa, 'id' | 'criadaEm'>>): void => {
     setDados(prev => {
@@ -239,7 +244,7 @@ export function usePainel() {
             }
         }
       }
-      if (!tarefaOriginal) { toast.error("Erro: Tarefa não encontrada."); return prev; }
+      if (!tarefaOriginal) { toast.error("Erro: Tarefa não encontrada para editar."); return prev; }
 
       if (novosDadosTarefa.categoriaId && novosDadosTarefa.categoriaId !== categoriaOriginalReal) {
         if(listaDaCategoriaOriginalReal && indexOriginal > -1) { 
@@ -382,7 +387,7 @@ export function usePainel() {
             texto: textoSubTarefa, completada: false,
           };
           tarefaPai.subTarefas = [...(tarefaPai.subTarefas || []), novaSub];
-          // toast.success("Sub-tarefa adicionada!"); // Pode ser muito verboso para lote
+          // toast.success("Sub-tarefa adicionada!"); // Removido para não poluir com muitos toasts em lote
         } else { console.error("Tarefa pai não encontrada para adicionar sub-tarefa"); }
       }
       return novosDados;

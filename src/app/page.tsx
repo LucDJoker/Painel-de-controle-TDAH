@@ -50,6 +50,9 @@ interface IaParsedCategory {
 }
 interface IaApiResponse {
   categorias?: IaParsedCategory[];
+  // Permite também que a resposta seja diretamente o array de categorias
+  [index: number]: IaParsedCategory; 
+  length?: number; // Para que Array.isArray funcione com esse tipo
 }
 
 export default function PaginaPrincipal() {
@@ -64,16 +67,9 @@ export default function PaginaPrincipal() {
     adicionarSubTarefa, alternarCompletarSubTarefa, excluirSubTarefa
   } = usePainel();
 
-  // --- VARIÁVEIS QUE ESTAVAM FALTANDO ---
-  const totalTarefasAtivas = obterTotalTarefas();
-  const venceuPeloMenosUmaHoje = jaConcluidoHoje();
-  const todasTarefasDoPainelConcluidas = !carregando && totalTarefasAtivas === 0 && dados.categorias && Object.keys(dados.categorias).length > 0 && (dados.progresso?.totalTarefasConcluidas || 0) > 0;
-
-
   const [tarefaConcluidaTexto, setTarefaConcluidaTexto] = useState<string>('');
   const [mostrarParabensIndividual, setMostrarParabensIndividual] = useState(false);
   const [categoriaSelecionada, setCategoriaSelecionada] = useState<string>(''); 
-  
   const [nomeNovaCat, setNomeNovaCat] = useState('');
   const [emojiNovaCat, setEmojiNovaCat] = useState(EMOJIS_SUGERIDOS[0]);
   const [corNovaCat, setCorNovaCat] = useState('#718096');
@@ -126,6 +122,10 @@ export default function PaginaPrincipal() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dados.tarefas, dados.categorias]); 
 
+  const totalTarefasAtivas = obterTotalTarefas();
+  const venceuPeloMenosUmaHoje = jaConcluidoHoje();
+  const todasTarefasDoPainelConcluidas = !carregando && totalTarefasAtivas === 0 && dados.categorias && Object.keys(dados.categorias).length > 0 && (dados.progresso?.totalTarefasConcluidas || 0) > 0;
+  
   const handleAbrirModalEditarTarefa = useCallback((tarefa: Tarefa):void => {
     setTarefaParaEditar(tarefa);
     setTextoEdicaoTarefa(tarefa.texto);
@@ -243,6 +243,24 @@ export default function PaginaPrincipal() {
     setOpenEmojiPickerEdicaoCat(false);
   }, []);
 
+  // Helper para verificar a estrutura de uma tarefa da IA
+  const isValidIaTask = (task: unknown): task is IaParsedTask => {
+    return typeof task === 'object' && task !== null &&
+           'textoTarefa' in task && typeof (task as IaParsedTask).textoTarefa === 'string' &&
+           'subTarefas' in task && Array.isArray((task as IaParsedTask).subTarefas) &&
+           (task as IaParsedTask).subTarefas.every((s: unknown) => typeof s === 'string') &&
+           ('dataHora' in task ? typeof (task as IaParsedTask).dataHora === 'string' : true); // dataHora é opcional
+  };
+
+  // Helper para verificar a estrutura de uma categoria da IA
+  const isValidIaCategory = (item: unknown): item is IaParsedCategory => {
+    return typeof item === 'object' && item !== null &&
+           'nomeCategoria' in item && typeof (item as IaParsedCategory).nomeCategoria === 'string' &&
+           'tarefas' in item && Array.isArray((item as IaParsedCategory).tarefas) &&
+           (item as IaParsedCategory).tarefas.every(isValidIaTask);
+  };
+
+
   const handleAdicionarTarefasEmLoteComIA = useCallback(async (): Promise<void> => {
     if (!textoEmLoteParaIA.trim()) {
       toast.error("Cole o texto do seu plano de estudos ou lista de tarefas.");
@@ -271,19 +289,10 @@ export default function PaginaPrincipal() {
       const resultadoIA = await response.json();
       
       let categoriasDaIA: IaParsedCategory[] = [];
-      const isItemValidCategory = (item: any): item is IaParsedCategory => 
-            typeof item.nomeCategoria === 'string' && 
-            Array.isArray(item.tarefas) &&
-            item.tarefas.every((t: any) => 
-                typeof t.textoTarefa === 'string' && 
-                Array.isArray(t.subTarefas) && 
-                t.subTarefas.every((s: any) => typeof s === 'string') &&
-                (t.dataHora === undefined || typeof t.dataHora === 'string')
-            );
-
-      if (Array.isArray(resultadoIA) && resultadoIA.every(isItemValidCategory)) {
+      
+      if (Array.isArray(resultadoIA) && resultadoIA.every(isValidIaCategory)) {
         categoriasDaIA = resultadoIA;
-      } else if (resultadoIA && typeof resultadoIA === 'object' && 'categorias' in resultadoIA && Array.isArray(resultadoIA.categorias) && resultadoIA.categorias.every(isItemValidCategory)) {
+      } else if (resultadoIA && typeof resultadoIA === 'object' && 'categorias' in resultadoIA && Array.isArray(resultadoIA.categorias) && resultadoIA.categorias.every(isValidIaCategory)) {
         categoriasDaIA = resultadoIA.categorias;
       } else {
         console.error("Resposta da IA não está no formato esperado:", resultadoIA);
@@ -378,8 +387,11 @@ export default function PaginaPrincipal() {
   }, [setAlarmeNovaTarefa]);
 
   const handleSelectEventCalendario = useCallback((event: CalendarEvent): void => {
-    if(event.resource) { handleAbrirModalEditarTarefa(event.resource as Tarefa); }
-  }, [handleAbrirModalEditarTarefa]);
+    if(event.resource && typeof handleAbrirModalEditarTarefa === 'function') { 
+      handleAbrirModalEditarTarefa(event.resource as Tarefa); 
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handleAbrirModalEditarTarefa]); 
 
   const tarefasComNumeros: { tarefa: Tarefa; numero: number; categoria: CategoriaInfo }[] = [];
   let contador = 1;
