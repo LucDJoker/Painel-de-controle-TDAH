@@ -123,10 +123,10 @@ export async function POST(request: NextRequest) {
     }
     
     if (error && typeof error === 'object') {
-        const errAsObject = error as Record<string, any>;
+        const errAsObject = error as { response?: { data?: unknown }, cause?: unknown }; // Tipagem mais genérica para 'data' e 'cause'
         if (errAsObject.response && typeof errAsObject.response === 'object' && errAsObject.response.data) {
             errorDetails = errAsObject.response.data as Record<string, unknown>;
-        } else if ('cause' in errAsObject) {
+        } else if (errAsObject.cause) {
             errorDetails = errAsObject.cause as Record<string, unknown>;
         }
     }

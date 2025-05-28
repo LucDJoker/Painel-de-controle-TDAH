@@ -36,6 +36,7 @@ import { Progress } from "@/components/ui/progress";
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { Views, type View, type NavigateAction } from 'react-big-calendar';
 
+
 const EMOJIS_SUGERIDOS = ['📁', '🏠', '🎓', '💼', '💪', '❤️', '🎉', '💡', '💰', '✈️', '🍽️', '📚', '🛠️', '✨', '🎯', '🤔', '😊', '🔥'];
 
 interface IaParsedTask {
@@ -63,9 +64,16 @@ export default function PaginaPrincipal() {
     adicionarSubTarefa, alternarCompletarSubTarefa, excluirSubTarefa
   } = usePainel();
 
+  // --- VARIÁVEIS QUE ESTAVAM FALTANDO ---
+  const totalTarefasAtivas = obterTotalTarefas();
+  const venceuPeloMenosUmaHoje = jaConcluidoHoje();
+  const todasTarefasDoPainelConcluidas = !carregando && totalTarefasAtivas === 0 && dados.categorias && Object.keys(dados.categorias).length > 0 && (dados.progresso?.totalTarefasConcluidas || 0) > 0;
+
+
   const [tarefaConcluidaTexto, setTarefaConcluidaTexto] = useState<string>('');
   const [mostrarParabensIndividual, setMostrarParabensIndividual] = useState(false);
   const [categoriaSelecionada, setCategoriaSelecionada] = useState<string>(''); 
+  
   const [nomeNovaCat, setNomeNovaCat] = useState('');
   const [emojiNovaCat, setEmojiNovaCat] = useState(EMOJIS_SUGERIDOS[0]);
   const [corNovaCat, setCorNovaCat] = useState('#718096');
@@ -92,6 +100,7 @@ export default function PaginaPrincipal() {
   const [dataAtualCalendario, setDataAtualCalendario] = useState(new Date());
   const [visualizacaoAtualCalendario, setVisualizacaoAtualCalendario] = useState<View>(Views.MONTH);
 
+
   const calendarEvents = useMemo((): CalendarEvent[] => {
     if (!dados || !dados.tarefas || typeof dados.tarefas !== 'object' || !dados.categorias) return [];
     const events: CalendarEvent[] = [];
@@ -114,13 +123,9 @@ export default function PaginaPrincipal() {
       }
     }
     return events;
-  // eslint-disable-next-line react-hooks/exhaustive-deps 
-  }, [dados.tarefas, dados.categorias]); // Adicionado dados.categorias
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dados.tarefas, dados.categorias]); 
 
-  const totalTarefasAtivas = obterTotalTarefas();
-  const todasTarefasDoPainelConcluidas = totalTarefasAtivas === 0 && !carregando && dados.categorias && Object.keys(dados.categorias).length > 0; 
-  const venceuPeloMenosUmaHoje = jaConcluidoHoje();
-  
   const handleAbrirModalEditarTarefa = useCallback((tarefa: Tarefa):void => {
     setTarefaParaEditar(tarefa);
     setTextoEdicaoTarefa(tarefa.texto);
@@ -210,12 +215,12 @@ export default function PaginaPrincipal() {
     if (textoNovaTarefa.trim() === "") { toast.error("O texto da tarefa não pode estar vazio."); return; }
     if (categoriaSelecionada) {
       adicionarTarefa(categoriaSelecionada, alarmeNovaTarefa || undefined, textoNovaTarefa);
-      setTextoNovaTarefa(''); // Limpa aqui
-      setAlarmeNovaTarefa(''); // Limpa aqui
+      setTextoNovaTarefa(''); 
+      setAlarmeNovaTarefa(''); 
     } else {
       toast.error("Por favor, selecione uma categoria.");
     }
-  }, [adicionarTarefa, textoNovaTarefa, categoriaSelecionada, alarmeNovaTarefa, setTextoNovaTarefa, setAlarmeNovaTarefa]); // Adicionado setters
+  }, [adicionarTarefa, textoNovaTarefa, categoriaSelecionada, alarmeNovaTarefa, setTextoNovaTarefa, setAlarmeNovaTarefa]);
 
   const handleCriarNovaCategoria = useCallback((): void => {
     if (nomeNovaCat.trim()) {
@@ -273,7 +278,7 @@ export default function PaginaPrincipal() {
                 typeof t.textoTarefa === 'string' && 
                 Array.isArray(t.subTarefas) && 
                 t.subTarefas.every((s: any) => typeof s === 'string') &&
-                (t.dataHora === undefined || typeof t.dataHora === 'string') // dataHora é opcional e string
+                (t.dataHora === undefined || typeof t.dataHora === 'string')
             );
 
       if (Array.isArray(resultadoIA) && resultadoIA.every(isItemValidCategory)) {
@@ -304,7 +309,7 @@ export default function PaginaPrincipal() {
           categoriaIdFinal = adicionarNovaCategoria(nomeCategoriaLimpo, emojiPadraoCat, corPadraoCat);
         }
         if (categoriaIdFinal) { 
-            totalCategoriasCriadasOuUsadas++; // Conta se foi criada ou usada
+            totalCategoriasCriadasOuUsadas++;
         } else {
              console.warn(`Categoria "${nomeCategoriaLimpo}" não pôde ser criada ou encontrada.`);
              continue;
@@ -352,7 +357,7 @@ export default function PaginaPrincipal() {
       setProcessandoLoteComIA(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [textoEmLoteParaIA, adicionarNovaCategoria, adicionarTarefa, dados.categorias, adicionarSubTarefa]); // Adicionei dados.categorias
+  }, [textoEmLoteParaIA, adicionarNovaCategoria, adicionarTarefa, dados.categorias, adicionarSubTarefa]); 
 
   const handleNavigateCalendario = useCallback((newDate: Date, view: View, action: NavigateAction): void => {
     setDataAtualCalendario(newDate);
@@ -370,7 +375,7 @@ export default function PaginaPrincipal() {
         toast.info("Alarme pré-preenchido em 'Adicionar Tarefa'.");
         document.getElementById('categoria-tarefa')?.focus();
     }
-  }, [setAlarmeNovaTarefa]); // Adicionado setAlarmeNovaTarefa
+  }, [setAlarmeNovaTarefa]);
 
   const handleSelectEventCalendario = useCallback((event: CalendarEvent): void => {
     if(event.resource) { handleAbrirModalEditarTarefa(event.resource as Tarefa); }

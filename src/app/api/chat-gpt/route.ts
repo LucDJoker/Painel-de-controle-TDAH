@@ -57,15 +57,13 @@ export async function POST(request: NextRequest) {
         errorMessage = error.message;
     }
     
-    // Para inspecionar erros da API da OpenAI de forma mais segura:
     if (error && typeof error === 'object') {
-        const errAsObject = error as Record<string, any>; // Casting para objeto genérico
-        if (errAsObject.response && typeof errAsObject.response === 'object' && errAsObject.response.data) {
-            const errorData = errAsObject.response.data as Record<string, any>;
-            if (errorData.error && typeof errorData.error === 'object' && typeof errorData.error.message === 'string') {
-                errorMessage = errorData.error.message;
-            }
-            errorDetails = errorData.error || errorData;
+        const errAsObject = error as { response?: { data?: { error?: { message?: string } } }, cause?: unknown };
+        if (errAsObject.response?.data?.error?.message) {
+            errorMessage = errAsObject.response.data.error.message;
+            errorDetails = errAsObject.response.data.error as Record<string, unknown>;
+        } else if (errAsObject.response?.data) {
+            errorDetails = errAsObject.response.data as Record<string, unknown>;
         } else if (errAsObject.cause) {
             errorDetails = errAsObject.cause as Record<string, unknown>;
         }
