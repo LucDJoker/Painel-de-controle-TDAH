@@ -1,4 +1,4 @@
-// src/app/api/processar-texto-ia/route.ts
+
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { NextRequest, NextResponse } from 'next/server';
 

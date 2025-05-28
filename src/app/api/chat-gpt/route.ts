@@ -1,4 +1,6 @@
 // src/app/api/chat-gpt/route.ts
+// ... (imports e código anterior)
+
 import OpenAI from 'openai';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -11,6 +13,10 @@ if (!OPENAI_API_KEY) {
 
 // Inicializa o cliente da OpenAI fora da função handler para reutilização
 const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
+
+// Ensure only one export of POST exists in this file.
+// (If you have another export or definition of POST elsewhere in this file, remove it.)
+// The following is the only export for POST:
 
 export async function POST(request: NextRequest) {
   if (!openai) {
