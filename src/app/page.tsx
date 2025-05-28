@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback, useEffect } from 'react'; // Adicionado useCallback e useEffect
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { 
@@ -17,7 +17,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { RefreshCw, PlusCircle, Trash2, Edit3, Sun, Moon, Sparkles, X, Plus, SmilePlus } from "lucide-react";
 import { toast } from "sonner";
 import { useTheme } from "next-themes";
-import EmojiPicker, { EmojiClickData, Theme as EmojiTheme, SkinTones } from 'emoji-picker-react';
+import EmojiPicker, { EmojiClickData, Theme as EmojiTheme, SkinTones, type EmojiStyle } from 'emoji-picker-react';
 
 import { usePainel } from "@/lib/use-painel";
 import PainelTarefa from "@/components/painel-tarefa";
@@ -269,14 +269,14 @@ export default function PaginaPrincipal() {
       
       let categoriasDaIA: IaParsedCategory[] = [];
       if (Array.isArray(resultadoIA)) {
-        if (resultadoIA.every(item => typeof item.nomeCategoria === 'string' && Array.isArray(item.tarefas) && item.tarefas.every((t: any) => typeof t.textoTarefa === 'string' && Array.isArray(t.subTarefas)))) {
+        if (resultadoIA.every(item => typeof item.nomeCategoria === 'string' && Array.isArray(item.tarefas) && item.tarefas.every((t: any) => typeof t.textoTarefa === 'string' && Array.isArray(t.subTarefas) && t.subTarefas.every((s: any) => typeof s === 'string')))) {
             categoriasDaIA = resultadoIA as IaParsedCategory[];
         } else {
             console.error("Resposta da IA é um array, mas os itens não são IaParsedCategory válidos:", resultadoIA);
         }
-      } else if (resultadoIA && Array.isArray((resultadoIA as IaApiResponse).categorias)) {
+      } else if (resultadoIA && typeof resultadoIA === 'object' && 'categorias' in resultadoIA && Array.isArray((resultadoIA as IaApiResponse).categorias)) {
         const categoriasTemp = (resultadoIA as IaApiResponse).categorias;
-        if (categoriasTemp && categoriasTemp.every(item => typeof item.nomeCategoria === 'string' && Array.isArray(item.tarefas) && item.tarefas.every((t: any) => typeof t.textoTarefa === 'string' && Array.isArray(t.subTarefas)))) {
+        if (categoriasTemp && categoriasTemp.every(item => typeof item.nomeCategoria === 'string' && Array.isArray(item.tarefas) && item.tarefas.every((t: any) => typeof t.textoTarefa === 'string' && Array.isArray(t.subTarefas) && t.subTarefas.every((s: any) => typeof s === 'string')))) {
             categoriasDaIA = categoriasTemp;
         } else {
             console.error("Resposta da IA é um objeto com .categorias, mas os itens não são IaParsedCategory válidos:", resultadoIA);
@@ -348,16 +348,15 @@ export default function PaginaPrincipal() {
       }
       setTextoEmLoteParaIA('');
 
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Erro na função handleAdicionarTarefasEmLoteComIA:", error);
       toast.dismiss(processingToastId);
       toast.error("Falha ao processar o texto com a IA.", {description: error instanceof Error ? error.message : "Erro desconhecido"});
     } finally {
       setProcessandoLoteComIA(false);
     }
-  }, [textoEmLoteParaIA, adicionarNovaCategoria, adicionarTarefa, dados.categorias, adicionarSubTarefa]); // Adicionada adicionarSubTarefa às dependências
+  }, [textoEmLoteParaIA, adicionarNovaCategoria, adicionarTarefa, dados.categorias, adicionarSubTarefa]);
 
-  // Handlers para o Calendário
   const handleNavigateCalendario = useCallback((newDate: Date, view: View, action: NavigateAction): void => {
     setDataAtualCalendario(newDate);
     setVisualizacaoAtualCalendario(view);
