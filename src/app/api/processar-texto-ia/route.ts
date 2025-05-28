@@ -2,6 +2,7 @@
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { NextRequest, NextResponse } from 'next/server';
 
+// Pega a chave da API das variáveis de ambiente
 const GEMINI_API_KEY = process.env.GOOGLE_GEMINI_API_KEY;
 
 const safetySettings = [
@@ -12,16 +13,17 @@ const safetySettings = [
 ];
 
 export async function POST(request: NextRequest) {
+  // Verifica se a chave da API foi carregada corretamente
   if (!GEMINI_API_KEY) {
     const errorMessage = "Chave da API do Gemini não configurada no servidor.";
-    console.error(`[API Rota ERRO] ${errorMessage}`);
-    return NextResponse.json({ error: errorMessage, details: "Verifique as variáveis de ambiente." }, { status: 500 });
+    console.error(`[API Rota ERRO CRÍTICO] ${errorMessage} Verifique as variáveis de ambiente .env.local e da Vercel.`);
+    return NextResponse.json({ error: errorMessage, details: "A chave da API não foi encontrada. Verifique as configurações do servidor." }, { status: 500 });
   }
 
   try {
     const reqBody = await request.json();
     const textoParaProcessar: string = reqBody.texto;
-    const hojeISO = new Date().toISOString();
+    const hojeISO = new Date().toISOString(); // Para dar contexto de data à IA
 
     if (!textoParaProcessar || typeof textoParaProcessar !== 'string' || textoParaProcessar.trim() === "") {
       return NextResponse.json({ error: "Texto para processar é obrigatório e não pode ser vazio." }, { status: 400 });
@@ -29,10 +31,11 @@ export async function POST(request: NextRequest) {
 
     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({ 
-        model: "gemini-1.5-flash-latest",
+        model: "gemini-1.5-flash-latest", // Modelo mais recente e rápido
         safetySettings,
         generationConfig: {
-            responseMimeType: "application/json",
+            responseMimeType: "application/json", // Pede explicitamente JSON
+            // temperature: 0.3, // Para respostas mais determinísticas e estruturadas
         }
     });
 
@@ -51,11 +54,11 @@ export async function POST(request: NextRequest) {
       - "nomeCategoria": string (o nome da categoria identificada)
       - "tarefas": array de objetos de tarefa, onde cada objeto tem:
           - "textoTarefa": string (o texto limpo da tarefa principal)
-          - "dataHora": string (a data e hora de início no formato ISO 8601 "YYYY-MM-DDTHH:mm:ss", opcional, somente se encontrado)
+          - "dataHora": string (a data e hora de início no formato ISO 8601 "YYYY-MM-DDTHH:mm:ss.sssZ", opcional, somente se encontrado e puder ser convertido para uma data válida)
           - "subTarefas": array de strings (os textos das sub-tarefas; se não houver, um array vazio [])
       
       Se não houver categorias explícitas, mas houver uma lista de tarefas, coloque todas sob uma categoria "Geral".
-      Se uma tarefa não tiver data/hora explícita, não inclua o campo "dataHora" para essa tarefa.
+      Se uma tarefa não tiver data/hora explícita ou se a data/hora não puder ser interpretada como uma data futura ou válida baseada em ${hojeISO}, não inclua o campo "dataHora" para essa tarefa.
       Certifique-se de que a saída seja um JSON válido e nada mais. Não inclua nenhuma explicação ou texto adicional antes ou depois do JSON.
 
       Exemplo de Texto de Entrada:
@@ -65,7 +68,7 @@ export async function POST(request: NextRequest) {
       Tarefa: Projeto Final [dia 15 14:00]
       Sub-tarefa: Definir escopo
 
-      Exemplo de JSON de Saída Esperado (assumindo que hoje é 2025-05-27 e a próxima quarta é 2025-05-28, e dia 15 é 2025-06-15):
+      Exemplo de JSON de Saída Esperado (assumindo que hoje é 2025-05-28 e a próxima quarta é 2025-05-28, e dia 15 do próximo mês é 2025-06-15):
       [
         {
           "nomeCategoria": "Estudos",
@@ -93,14 +96,27 @@ export async function POST(request: NextRequest) {
     console.log("[API Rota IA] Enviando prompt para a IA...");
     const result = await model.generateContent(prompt);
     const response = result.response;
-    const textResponse = response.text();
+    
+    // Verifica se há candidatos e se o primeiro tem conteúdo
+    if (!response.candidates || !response.candidates[0] || !response.candidates[0].content || !response.candidates[0].content.parts || !response.candidates[0].content.parts[0]) {
+        console.error("[API Rota IA] Resposta da IA não contém a estrutura esperada (candidates/content/parts). Resposta completa:", JSON.stringify(response, null, 2));
+        return NextResponse.json({ error: "A IA retornou uma resposta vazia ou malformada.", iaResponse: response }, { status: 500 });
+    }
+    
+    const textResponse = response.candidates[0].content.parts[0].text || ""; // Pega o texto da primeira parte
     
     console.log("[API Rota IA] Resposta da IA (texto bruto):", textResponse);
 
     let jsonString = textResponse.trim();
-    if (jsonString.startsWith("```json")) { jsonString = jsonString.substring(jsonString.indexOf('[') === -1 ? jsonString.indexOf('{') : jsonString.indexOf('[')); }
-    if (jsonString.endsWith("```")) { jsonString = jsonString.substring(0, jsonString.lastIndexOf(']') === -1 ? jsonString.lastIndexOf('}') : jsonString.lastIndexOf(']') + 1); }
-    jsonString = jsonString.trim();
+    // Tentativa mais robusta de limpar o JSON, caso a IA adicione markdown
+    const jsonMatch = jsonString.match(/(\[[\s\S]*\]|\{[\s\S]*\})/);
+    if (jsonMatch && jsonMatch[0]) {
+        jsonString = jsonMatch[0];
+    } else {
+        console.error("[API Rota IA] Não foi possível extrair um JSON válido da resposta da IA. Resposta bruta:", textResponse);
+        return NextResponse.json({ error: "A IA não retornou um JSON reconhecível.", iaResponse: textResponse }, { status: 500 });
+    }
+    
 
     try {
       const dadosEstruturados = JSON.parse(jsonString);
@@ -123,11 +139,13 @@ export async function POST(request: NextRequest) {
     }
     
     if (error && typeof error === 'object') {
-        const errAsObject = error as { response?: { data?: unknown }, cause?: unknown }; // Tipagem mais genérica para 'data' e 'cause'
+        const errAsObject = error as { response?: { data?: unknown }, cause?: unknown, message?: string };
         if (errAsObject.response && typeof errAsObject.response === 'object' && errAsObject.response.data) {
             errorDetails = errAsObject.response.data as Record<string, unknown>;
         } else if (errAsObject.cause) {
             errorDetails = errAsObject.cause as Record<string, unknown>;
+        } else if (errAsObject.message) { // Algumas APIs de erro da Google podem ter a mensagem aqui
+            errorMessage = errAsObject.message;
         }
     }
 
