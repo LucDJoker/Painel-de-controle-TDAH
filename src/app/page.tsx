@@ -17,7 +17,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { RefreshCw, PlusCircle, Trash2, Edit3, Sun, Moon, Sparkles, X, Plus, SmilePlus } from "lucide-react";
 import { toast } from "sonner";
 import { useTheme } from "next-themes";
-import EmojiPicker, { EmojiClickData, Theme as EmojiTheme, SkinTones, type EmojiStyle } from 'emoji-picker-react';
+import EmojiPicker, { EmojiClickData, Theme as EmojiTheme, SkinTones } from 'emoji-picker-react';
 
 import { usePainel } from "@/lib/use-painel";
 import PainelTarefa from "@/components/painel-tarefa";
@@ -35,7 +35,6 @@ import { Progress } from "@/components/ui/progress";
 
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { Views, type View, type NavigateAction } from 'react-big-calendar';
-
 
 const EMOJIS_SUGERIDOS = ['📁', '🏠', '🎓', '💼', '💪', '❤️', '🎉', '💡', '💰', '✈️', '🍽️', '📚', '🛠️', '✨', '🎯', '🤔', '😊', '🔥'];
 
@@ -67,7 +66,6 @@ export default function PaginaPrincipal() {
   const [tarefaConcluidaTexto, setTarefaConcluidaTexto] = useState<string>('');
   const [mostrarParabensIndividual, setMostrarParabensIndividual] = useState(false);
   const [categoriaSelecionada, setCategoriaSelecionada] = useState<string>(''); 
-  
   const [nomeNovaCat, setNomeNovaCat] = useState('');
   const [emojiNovaCat, setEmojiNovaCat] = useState(EMOJIS_SUGERIDOS[0]);
   const [corNovaCat, setCorNovaCat] = useState('#718096');
@@ -94,7 +92,6 @@ export default function PaginaPrincipal() {
   const [dataAtualCalendario, setDataAtualCalendario] = useState(new Date());
   const [visualizacaoAtualCalendario, setVisualizacaoAtualCalendario] = useState<View>(Views.MONTH);
 
-
   const calendarEvents = useMemo((): CalendarEvent[] => {
     if (!dados || !dados.tarefas || typeof dados.tarefas !== 'object' || !dados.categorias) return [];
     const events: CalendarEvent[] = [];
@@ -117,7 +114,8 @@ export default function PaginaPrincipal() {
       }
     }
     return events;
-  }, [dados.tarefas, dados.categorias]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps 
+  }, [dados.tarefas, dados.categorias]); // Adicionado dados.categorias
 
   const totalTarefasAtivas = obterTotalTarefas();
   const todasTarefasDoPainelConcluidas = totalTarefasAtivas === 0 && !carregando && dados.categorias && Object.keys(dados.categorias).length > 0; 
@@ -212,12 +210,12 @@ export default function PaginaPrincipal() {
     if (textoNovaTarefa.trim() === "") { toast.error("O texto da tarefa não pode estar vazio."); return; }
     if (categoriaSelecionada) {
       adicionarTarefa(categoriaSelecionada, alarmeNovaTarefa || undefined, textoNovaTarefa);
-      setTextoNovaTarefa(''); 
-      setAlarmeNovaTarefa(''); 
+      setTextoNovaTarefa(''); // Limpa aqui
+      setAlarmeNovaTarefa(''); // Limpa aqui
     } else {
       toast.error("Por favor, selecione uma categoria.");
     }
-  }, [adicionarTarefa, textoNovaTarefa, categoriaSelecionada, alarmeNovaTarefa]);
+  }, [adicionarTarefa, textoNovaTarefa, categoriaSelecionada, alarmeNovaTarefa, setTextoNovaTarefa, setAlarmeNovaTarefa]); // Adicionado setters
 
   const handleCriarNovaCategoria = useCallback((): void => {
     if (nomeNovaCat.trim()) {
@@ -268,24 +266,23 @@ export default function PaginaPrincipal() {
       const resultadoIA = await response.json();
       
       let categoriasDaIA: IaParsedCategory[] = [];
-      if (Array.isArray(resultadoIA)) {
-        if (resultadoIA.every(item => typeof item.nomeCategoria === 'string' && Array.isArray(item.tarefas) && item.tarefas.every((t: any) => typeof t.textoTarefa === 'string' && Array.isArray(t.subTarefas) && t.subTarefas.every((s: any) => typeof s === 'string')))) {
-            categoriasDaIA = resultadoIA as IaParsedCategory[];
-        } else {
-            console.error("Resposta da IA é um array, mas os itens não são IaParsedCategory válidos:", resultadoIA);
-        }
-      } else if (resultadoIA && typeof resultadoIA === 'object' && 'categorias' in resultadoIA && Array.isArray((resultadoIA as IaApiResponse).categorias)) {
-        const categoriasTemp = (resultadoIA as IaApiResponse).categorias;
-        if (categoriasTemp && categoriasTemp.every(item => typeof item.nomeCategoria === 'string' && Array.isArray(item.tarefas) && item.tarefas.every((t: any) => typeof t.textoTarefa === 'string' && Array.isArray(t.subTarefas) && t.subTarefas.every((s: any) => typeof s === 'string')))) {
-            categoriasDaIA = categoriasTemp;
-        } else {
-            console.error("Resposta da IA é um objeto com .categorias, mas os itens não são IaParsedCategory válidos:", resultadoIA);
-        }
-      }
-      
-      if (categoriasDaIA.length === 0 && textoEmLoteParaIA.trim() !== "") {
-        console.error("Não foi possível extrair categorias válidas da resposta da IA:", resultadoIA);
-        toast.error("A IA retornou um formato de dados inesperado ou vazio. Verifique o log do servidor.");
+      const isItemValidCategory = (item: any): item is IaParsedCategory => 
+            typeof item.nomeCategoria === 'string' && 
+            Array.isArray(item.tarefas) &&
+            item.tarefas.every((t: any) => 
+                typeof t.textoTarefa === 'string' && 
+                Array.isArray(t.subTarefas) && 
+                t.subTarefas.every((s: any) => typeof s === 'string') &&
+                (t.dataHora === undefined || typeof t.dataHora === 'string') // dataHora é opcional e string
+            );
+
+      if (Array.isArray(resultadoIA) && resultadoIA.every(isItemValidCategory)) {
+        categoriasDaIA = resultadoIA;
+      } else if (resultadoIA && typeof resultadoIA === 'object' && 'categorias' in resultadoIA && Array.isArray(resultadoIA.categorias) && resultadoIA.categorias.every(isItemValidCategory)) {
+        categoriasDaIA = resultadoIA.categorias;
+      } else {
+        console.error("Resposta da IA não está no formato esperado:", resultadoIA);
+        toast.error("A IA retornou um formato de dados inesperado. Verifique o log do servidor.");
         setProcessandoLoteComIA(false);
         return;
       }
@@ -307,8 +304,7 @@ export default function PaginaPrincipal() {
           categoriaIdFinal = adicionarNovaCategoria(nomeCategoriaLimpo, emojiPadraoCat, corPadraoCat);
         }
         if (categoriaIdFinal) { 
-            if (!categoriaExistente) totalCategoriasCriadasOuUsadas++;
-            else totalCategoriasCriadasOuUsadas++;
+            totalCategoriasCriadasOuUsadas++; // Conta se foi criada ou usada
         } else {
              console.warn(`Categoria "${nomeCategoriaLimpo}" não pôde ser criada ou encontrada.`);
              continue;
@@ -355,7 +351,8 @@ export default function PaginaPrincipal() {
     } finally {
       setProcessandoLoteComIA(false);
     }
-  }, [textoEmLoteParaIA, adicionarNovaCategoria, adicionarTarefa, dados.categorias, adicionarSubTarefa]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [textoEmLoteParaIA, adicionarNovaCategoria, adicionarTarefa, dados.categorias, adicionarSubTarefa]); // Adicionei dados.categorias
 
   const handleNavigateCalendario = useCallback((newDate: Date, view: View, action: NavigateAction): void => {
     setDataAtualCalendario(newDate);
@@ -373,11 +370,11 @@ export default function PaginaPrincipal() {
         toast.info("Alarme pré-preenchido em 'Adicionar Tarefa'.");
         document.getElementById('categoria-tarefa')?.focus();
     }
-  }, []);
+  }, [setAlarmeNovaTarefa]); // Adicionado setAlarmeNovaTarefa
 
   const handleSelectEventCalendario = useCallback((event: CalendarEvent): void => {
     if(event.resource) { handleAbrirModalEditarTarefa(event.resource as Tarefa); }
-  }, [handleAbrirModalEditarTarefa]); // Adicionada handleAbrirModalEditarTarefa como dependência
+  }, [handleAbrirModalEditarTarefa]);
 
   const tarefasComNumeros: { tarefa: Tarefa; numero: number; categoria: CategoriaInfo }[] = [];
   let contador = 1;

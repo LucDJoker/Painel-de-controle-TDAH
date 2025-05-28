@@ -1,4 +1,4 @@
-
+// src/app/api/processar-texto-ia/route.ts
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -10,67 +10,6 @@ const safetySettings = [
   { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
   { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
 ];
-
-// Função para tentar converter dia da semana e hora em uma data ISO
-function tryParseDateTime(textFragment: string, today: Date): string | undefined {
-    const dayMap: { [key: string]: number } = {
-        'domingo': 0, 'segunda': 1, 'terça': 2, 'quarta': 3, 'quinta': 4, 'sexta': 5, 'sábado': 6,
-        'dom': 0, 'seg': 1, 'ter': 2, 'qua': 3, 'qui': 4, 'sex': 5, 'sab': 6
-    };
-
-    const match = textFragment.match(/\[\s*([^\]\s]+)\s*(\d{1,2}:\d{2})\s*\]/i);
-    if (match) {
-        const dayStr = match[1].toLowerCase();
-        const timeStr = match[2]; // HH:mm
-        const [hours, minutes] = timeStr.split(':').map(Number);
-
-        let targetDay = dayMap[dayStr];
-        if (targetDay === undefined && dayStr.match(/^\d{1,2}\/\d{1,2}/)) { // Formato DD/MM
-            const [dayOfMonth, month] = dayStr.split('/').map(Number);
-            if (dayOfMonth && month) {
-                const targetDate = new Date(today.getFullYear(), month - 1, dayOfMonth, hours, minutes, 0);
-                if (targetDate >= today) {
-                    return targetDate.toISOString();
-                } else { // Se a data já passou este ano, assume o próximo ano
-                    targetDate.setFullYear(today.getFullYear() + 1);
-                    return targetDate.toISOString();
-                }
-            }
-        } else if (targetDay === undefined) {
-            // Tenta ver se é uma data como "dia 29"
-            const dayNumMatch = dayStr.match(/dia\s*(\d+)/i);
-            if (dayNumMatch && dayNumMatch[1]) {
-                const dayOfMonth = parseInt(dayNumMatch[1], 10);
-                let targetDate = new Date(today.getFullYear(), today.getMonth(), dayOfMonth, hours, minutes, 0);
-                if (targetDate < today) { // Se o dia já passou neste mês, tenta o próximo mês
-                    targetDate = new Date(today.getFullYear(), today.getMonth() + 1, dayOfMonth, hours, minutes, 0);
-                }
-                 // Se ainda assim for no passado (ex: dia 29 de um mês que só tem 28, e pulou pro mês seguinte mas ainda é passado)
-                 // Poderia adicionar lógica para próximo ano, mas vamos manter simples por ora.
-                return targetDate.toISOString();
-            }
-            return undefined; // Não conseguiu parsear o dia
-        }
-
-
-        let date = new Date(today);
-        // Avança até encontrar o dia da semana desejado (na semana atual ou próxima)
-        while (date.getDay() !== targetDay || date < today) {
-            date.setDate(date.getDate() + 1);
-            if (date.getDay() === targetDay && date < today) { // Se encontrou o dia mas é no passado desta semana, pula 7 dias
-                date.setDate(date.getDate() + 7);
-                break;
-            }
-             if (date.getDay() === targetDay && date >= today) { // Encontrou o dia correto
-                break;
-            }
-        }
-        date.setHours(hours, minutes, 0, 0);
-        return date.toISOString();
-    }
-    return undefined;
-}
-
 
 export async function POST(request: NextRequest) {
   if (!GEMINI_API_KEY) {
@@ -94,7 +33,6 @@ export async function POST(request: NextRequest) {
         safetySettings,
         generationConfig: {
             responseMimeType: "application/json",
-            // temperature: 0.3 // Menor temperatura para respostas mais determinísticas e estruturadas
         }
     });
 
@@ -152,34 +90,51 @@ export async function POST(request: NextRequest) {
       ---
     `;
 
-    console.log("[API Rota] Enviando prompt para a IA...");
+    console.log("[API Rota IA] Enviando prompt para a IA...");
     const result = await model.generateContent(prompt);
     const response = result.response;
     const textResponse = response.text();
     
-    console.log("[API Rota] Resposta da IA (texto bruto):", textResponse);
+    console.log("[API Rota IA] Resposta da IA (texto bruto):", textResponse);
 
     let jsonString = textResponse.trim();
-    if (jsonString.startsWith("```json")) { jsonString = jsonString.substring(jsonString.indexOf('[') === -1 ? jsonString.indexOf('{') : jsonString.indexOf('[')); } // Tenta pegar o início do array ou objeto JSON
+    if (jsonString.startsWith("```json")) { jsonString = jsonString.substring(jsonString.indexOf('[') === -1 ? jsonString.indexOf('{') : jsonString.indexOf('[')); }
     if (jsonString.endsWith("```")) { jsonString = jsonString.substring(0, jsonString.lastIndexOf(']') === -1 ? jsonString.lastIndexOf('}') : jsonString.lastIndexOf(']') + 1); }
     jsonString = jsonString.trim();
 
     try {
       const dadosEstruturados = JSON.parse(jsonString);
-      console.log("[API Rota] JSON parseado com sucesso:", dadosEstruturados);
+      console.log("[API Rota IA] JSON parseado com sucesso:", dadosEstruturados);
       return NextResponse.json(dadosEstruturados, { status: 200 });
-    } catch (e: any) {
-      console.error("[API Rota] Erro ao parsear JSON da IA:", e.message);
-      console.error("[API Rota] String que causou o erro de parse:", jsonString);
-      return NextResponse.json({ error: "A IA retornou um formato que não é JSON válido.", iaResponse: jsonString, parseError: e.message }, { status: 500 });
+    } catch (parseError: unknown) { 
+      const errorMessage = parseError instanceof Error ? parseError.message : "Erro de parse desconhecido";
+      console.error("[API Rota IA] Erro ao parsear JSON da IA:", errorMessage);
+      console.error("[API Rota IA] String que causou o erro de parse:", jsonString);
+      return NextResponse.json({ error: "A IA retornou um formato que não é JSON válido.", iaResponse: jsonString, parseError: errorMessage }, { status: 500 });
     }
 
-  } catch (error: any) {
-    console.error("[API Rota] Erro ao chamar a API do Gemini ou outro erro:", error);
+  } catch (error: unknown) { 
+    console.error("[API Rota IA] Erro ao chamar a API do Gemini ou outro erro:", error);
+    let errorMessage = "Erro desconhecido ao processar o texto com IA.";
+    let errorDetails: Record<string, unknown> = {};
+
+    if (error instanceof Error) {
+        errorMessage = error.message;
+    }
+    
+    if (error && typeof error === 'object') {
+        const errAsObject = error as Record<string, any>;
+        if (errAsObject.response && typeof errAsObject.response === 'object' && errAsObject.response.data) {
+            errorDetails = errAsObject.response.data as Record<string, unknown>;
+        } else if ('cause' in errAsObject) {
+            errorDetails = errAsObject.cause as Record<string, unknown>;
+        }
+    }
+
     return NextResponse.json({ 
         error: "Erro interno do servidor ao contatar a IA.", 
-        details: error.message || "Erro desconhecido",
-        apiErrorDetails: error.response?.data || error.cause || {}
+        details: errorMessage,
+        apiErrorDetails: errorDetails 
     }, { status: 500 });
   }
 }
