@@ -1,3 +1,4 @@
+// src/lib/use-painel.ts
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -6,13 +7,23 @@ import type { DadosApp, Tarefa, TarefaConcluida, Categoria, ConfigPomodoro, SubT
 import { carregarDados, salvarDados, resetarDados } from './armazenamento';
 import { obterDadosIniciais } from './dados-iniciais';
 
+// Tipos da IA, agora o hook também entende eles
+export interface IaParsedTask {
+  textoTarefa: string;
+  dataHora?: string | null;
+  subTarefas?: string[];
+}
+export interface IaParsedCategory {
+  nomeCategoria: string;
+  tarefas: IaParsedTask[];
+}
+
+// Emojis sugeridos para categorias criadas automaticamente pela IA
+const EMOJIS_SUGERIDOS = [
+  "📚", "📝", "💼", "🏠", "🛒", "🎯", "🧹", "💡", "📅", "🕒", "🧑‍💻", "📈", "🛠️", "🎓", "🏃‍♂️", "🍎", "🎵", "🧘", "🚀", "🌟"
+];
+
 type TipoCicloPomodoro = 'FOCO' | 'PAUSA_CURTA' | 'PAUSA_LONGA';
-
-const DURACAO_FOCO_PADRAO = 25;
-const DURACAO_PAUSA_CURTA_PADRAO = 5;
-const DURACAO_PAUSA_LONGA_PADRAO = 15;
-const CICLOS_ATE_PAUSA_LONGA_PADRAO = 4;
-
 
 export function usePainel() {
   const dadosIniciaisGlobais = useRef(obterDadosIniciais());
@@ -47,11 +58,7 @@ export function usePainel() {
     }
   }, []); 
 
-  useEffect(() => { 
-    if (!carregando) { 
-      salvarDados(dados); 
-    } 
-  }, [dados, carregando]);
+  useEffect(() => { if (!carregando) { salvarDados(dados); } }, [dados, carregando]);
   
   const tocarSom = useCallback((audioElement: HTMLAudioElement | null, nomeSom: string): void => {
     if (audioElement) {
@@ -142,7 +149,7 @@ export function usePainel() {
     if (cicloAtualPomodoro === 'FOCO') setTempoRestantePomodoro(confPomo.duracaoFocoMin * 60);
     else if (cicloAtualPomodoro === 'PAUSA_CURTA') setTempoRestantePomodoro(confPomo.duracaoPausaCurtaMin * 60);
     else if (cicloAtualPomodoro === 'PAUSA_LONGA') setTempoRestantePomodoro(confPomo.duracaoPausaLongaMin * 60);
-    setCiclosCompletos(0); // Reseta o contador de ciclos da sessão
+    setCiclosCompletos(0);
   }, [cicloAtualPomodoro, getConfigPomodoro]);
 
   const atualizarConfigPomodoro = useCallback((novasConfigs: Partial<ConfigPomodoro>): void => {
@@ -162,15 +169,13 @@ export function usePainel() {
   const concluirTarefa = useCallback((tarefaParaConcluir: Tarefa): void => {
     const todasSubTarefasConcluidas = tarefaParaConcluir.subTarefas?.every(st => st.completada) ?? true;
     if (!todasSubTarefasConcluidas && (tarefaParaConcluir.subTarefas?.length || 0) > 0) {
-        toast.error("Conclua todas as sub-tarefas primeiro.", {
-            description: "Ou remova as sub-tarefas pendentes para concluir a tarefa principal."
-        });
+        toast.error("Conclua todas as sub-tarefas primeiro.", { description: "Ou remova as sub-tarefas pendentes para concluir a tarefa principal." });
         return;
     }
     setDados(prev => {
       const novosDados = JSON.parse(JSON.stringify(prev)) as DadosApp;
       const { categoriaId } = tarefaParaConcluir;
-      if (novosDados.tarefas && novosDados.tarefas[categoriaId]) { // Garante que tarefas[categoriaId] existe
+      if (novosDados.tarefas[categoriaId]) {
         const index = novosDados.tarefas[categoriaId].findIndex(t => t.id === tarefaParaConcluir.id);
         if (index > -1) {
           const [tarefaRemovida] = novosDados.tarefas[categoriaId].splice(index, 1);
@@ -178,7 +183,7 @@ export function usePainel() {
             novosDados.progresso.totalTarefasConcluidas = (novosDados.progresso.totalTarefasConcluidas || 0) + 1;
             if (novosDados.progresso.tarefasConcluidasPorCategoria && typeof novosDados.progresso.tarefasConcluidasPorCategoria === 'object') {
                 novosDados.progresso.tarefasConcluidasPorCategoria[categoriaId] = (novosDados.progresso.tarefasConcluidasPorCategoria[categoriaId] || 0) + 1;
-            } else if (novosDados.progresso) { // Garante que tarefasConcluidasPorCategoria existe
+            } else if (novosDados.progresso) {
                 novosDados.progresso.tarefasConcluidasPorCategoria = { [categoriaId]: 1 };
             }
             novosDados.progresso.ultimaTarefaConcluida = new Date();
@@ -244,7 +249,7 @@ export function usePainel() {
             }
         }
       }
-      if (!tarefaOriginal) { toast.error("Erro: Tarefa não encontrada para editar."); return prev; }
+      if (!tarefaOriginal) { toast.error("Erro: Tarefa não encontrada."); return prev; }
 
       if (novosDadosTarefa.categoriaId && novosDadosTarefa.categoriaId !== categoriaOriginalReal) {
         if(listaDaCategoriaOriginalReal && indexOriginal > -1) { 
@@ -347,17 +352,14 @@ export function usePainel() {
     if (intervalRefPomodoro.current) clearInterval(intervalRefPomodoro.current);
     setPomodoroAtivo(false);
     setCicloAtualPomodoro('FOCO');
-    const configPomoReset = dadosIniciaisReset.configPomodoro || getConfigPomodoro();
+    const configPomoReset = dadosIniciaisReset.configPomodoro || getConfigPomodoro(); // Usa getConfigPomodoro como fallback
     setTempoRestantePomodoro(configPomoReset.duracaoFocoMin * 60);
     setCiclosCompletos(0);
-  }, [getConfigPomodoro]);
+  }, [getConfigPomodoro]); // Depende de getConfigPomodoro
 
   const obterTotalTarefas = useCallback((): number => {
     if (!dados || !dados.tarefas || typeof dados.tarefas !== 'object') return 0;
-    return (Object.keys(dados.tarefas)).reduce((total, key) => {
-        const tarefasDaCategoria = dados.tarefas[key];
-        return total + (Array.isArray(tarefasDaCategoria) ? tarefasDaCategoria.length : 0);
-    }, 0);
+    return (Object.values(dados.tarefas)).reduce((total, tarefasDaCategoria) => total + (Array.isArray(tarefasDaCategoria) ? tarefasDaCategoria.length : 0), 0);
   }, [dados.tarefas]);
 
   const obterTarefasHoje = useCallback((): TarefaConcluida[] => {
@@ -388,7 +390,7 @@ export function usePainel() {
           };
           tarefaPai.subTarefas = [...(tarefaPai.subTarefas || []), novaSub];
           // toast.success("Sub-tarefa adicionada!"); // Removido para não poluir com muitos toasts em lote
-        } else { console.error("Tarefa pai não encontrada para adicionar sub-tarefa"); }
+        } else { console.error("Tarefa pai não encontrada para adicionar sub-tarefa", {tarefaPaiId, categoriaId}); }
       }
       return novosDados;
     });
@@ -425,6 +427,78 @@ export function usePainel() {
       return novosDados;
     });
   }, []);
+  
+  // --- NOVA FUNÇÃO ATÔMICA PARA PROCESSAR O LOTE DA IA ---
+  const adicionarLoteDeDadosIA = useCallback((lote: IaParsedCategory[]): { tarefas: number, subtarefas: number, categorias: number } => {
+    const contadores = { tarefas: 0, subtarefas: 0, categorias: 0 };
+
+    setDados(prevDados => {
+        const novosDados = JSON.parse(JSON.stringify(prevDados)) as DadosApp;
+        // Garante que categorias e tarefas existam
+        novosDados.categorias = novosDados.categorias || {};
+        novosDados.tarefas = novosDados.tarefas || {};
+
+        const categoriasExistentesPorNome = Object.values(novosDados.categorias).reduce((acc, cat) => {
+            acc[cat.nome.toLowerCase()] = cat;
+            return acc;
+        }, {} as Record<string, Categoria>);
+
+        for (const itemCategoria of lote) {
+            let categoriaFinal: Categoria | undefined;
+            const nomeCategoriaLimpo = itemCategoria.nomeCategoria.trim();
+            
+            categoriaFinal = categoriasExistentesPorNome[nomeCategoriaLimpo.toLowerCase()];
+
+            if (!categoriaFinal) {
+                contadores.categorias++;
+                const emojiPadraoCat = EMOJIS_SUGERIDOS[Math.floor(Math.random() * EMOJIS_SUGERIDOS.length)];
+                const corPadraoCat = `#${Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')}`;
+                const novoIdCategoria = `cat_ia_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+                categoriaFinal = { 
+                    id: novoIdCategoria, 
+                    nome: nomeCategoriaLimpo, 
+                    emoji: emojiPadraoCat, 
+                    cor: corPadraoCat 
+                };
+                novosDados.categorias[categoriaFinal.id] = categoriaFinal;
+                categoriasExistentesPorNome[nomeCategoriaLimpo.toLowerCase()] = categoriaFinal; // Atualiza o lookup
+                novosDados.tarefas[categoriaFinal.id] = [];
+            }
+
+            if (categoriaFinal) { // Garante que categoriaFinal foi definida
+                for (const tarefaIA of itemCategoria.tarefas) {
+                    if (tarefaIA.textoTarefa && typeof tarefaIA.textoTarefa === 'string' && tarefaIA.textoTarefa.trim() !== "") {
+                        contadores.tarefas++;
+                        const subTarefasParaCriar: SubTarefa[] = (tarefaIA.subTarefas || []).map(textoSub => {
+                            contadores.subtarefas++;
+                            return {
+                                id: `sub_ia_${Date.now()}_${Math.random().toString(36).substr(2,5)}`,
+                                texto: textoSub.trim(),
+                                completada: false,
+                            };
+                        }).filter(st => st.texto !== "");
+
+                        const novaTarefa: Tarefa = {
+                            id: `tarefa_ia_${Date.now()}_${Math.random().toString(36).substr(2,9)}`,
+                            texto: tarefaIA.textoTarefa.trim(),
+                            alarme: tarefaIA.dataHora ? new Date(tarefaIA.dataHora) : undefined,
+                            completada: false,
+                            categoriaId: categoriaFinal.id,
+                            criadaEm: new Date(),
+                            subTarefas: subTarefasParaCriar,
+                        };
+                        // Adiciona no início da lista para aparecer no topo
+                        novosDados.tarefas[categoriaFinal.id] = [novaTarefa, ...(novosDados.tarefas[categoriaFinal.id] || [])];
+                    }
+                }
+            } else {
+                console.warn(`Não foi possível processar a categoria: ${nomeCategoriaLimpo} da IA.`);
+            }
+        }
+        return novosDados;
+    });
+    return contadores;
+  }, []); // Removidas dependências que não são do hook (como 'dados')
 
   return {
     dados, carregando, concluirTarefa, adicionarTarefa, excluirTarefa, editarTarefa,
@@ -436,5 +510,6 @@ export function usePainel() {
     iniciarOuPausarPomodoro, resetarPomodoro: resetarCicloPomodoro, 
     atualizarConfigPomodoro, configPomodoro: getConfigPomodoro(),
     adicionarSubTarefa, alternarCompletarSubTarefa, excluirSubTarefa,
+    adicionarLoteDeDadosIA // EXPORTANDO A NOVA FUNÇÃO
   };
 }

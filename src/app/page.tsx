@@ -39,18 +39,16 @@ import { Views, type View, type NavigateAction } from 'react-big-calendar';
 
 const EMOJIS_SUGERIDOS = ['📁', '🏠', '🎓', '💼', '💪', '❤️', '🎉', '💡', '💰', '✈️', '🍽️', '📚', '🛠️', '✨', '🎯', '🤔', '😊', '🔥'];
 
-// Tipos para a resposta da IA
 interface IaParsedTask {
   textoTarefa: string;
-  dataHora?: string | null; // Permitindo null explicitamente
-  subTarefas?: string[];   // Tornando opcional, e a IA deve retornar array vazio se não houver
+  dataHora?: string | null; 
+  subTarefas?: string[]; // Tornando opcional, e a IA deve retornar array vazio se não houver
 }
 interface IaParsedCategory {
   nomeCategoria: string;
   tarefas: IaParsedTask[];
 }
-// Definição do tipo IaApiResponse para uso posterior
-type IaApiResponse = { categorias?: IaParsedCategory[] };
+type IaApiResponse = IaParsedCategory[] | { categorias?: IaParsedCategory[] };
 
 export default function PaginaPrincipal() {
   const { setTheme, theme: currentTheme } = useTheme();
@@ -61,12 +59,14 @@ export default function PaginaPrincipal() {
     alarmeNovaTarefa, setAlarmeNovaTarefa, tempoRestantePomodoro, pomodoroAtivo,
     cicloAtualPomodoro, ciclosCompletos, iniciarOuPausarPomodoro,
     resetarPomodoro: resetarCicloPomodoro, atualizarConfigPomodoro, configPomodoro,
-    adicionarSubTarefa, alternarCompletarSubTarefa, excluirSubTarefa
+    adicionarSubTarefa, alternarCompletarSubTarefa, excluirSubTarefa,
+    adicionarLoteDeDadosIA // Adicionando para usar a função do hook
   } = usePainel();
 
   const [tarefaConcluidaTexto, setTarefaConcluidaTexto] = useState<string>('');
   const [mostrarParabensIndividual, setMostrarParabensIndividual] = useState(false);
   const [categoriaSelecionada, setCategoriaSelecionada] = useState<string>(''); 
+  
   const [nomeNovaCat, setNomeNovaCat] = useState('');
   const [emojiNovaCat, setEmojiNovaCat] = useState(EMOJIS_SUGERIDOS[0]);
   const [corNovaCat, setCorNovaCat] = useState('#718096');
@@ -240,12 +240,11 @@ export default function PaginaPrincipal() {
     setOpenEmojiPickerEdicaoCat(false);
   }, []);
 
-  // --- VALIDAÇÃO MAIS ROBUSTA ---
   const isValidIaTask = (task: unknown): task is IaParsedTask => {
     if (typeof task !== 'object' || task === null) return false;
-    const t = task as Partial<IaParsedTask>; // Cast parcial para checagem
+    const t = task as Partial<IaParsedTask>;
     return typeof t.textoTarefa === 'string' &&
-           (Array.isArray(t.subTarefas) ? t.subTarefas.every((s: unknown) => typeof s === 'string') : t.subTarefas === undefined || t.subTarefas === null) &&
+           (t.subTarefas === undefined || t.subTarefas === null || (Array.isArray(t.subTarefas) && t.subTarefas.every((s: unknown) => typeof s === 'string'))) &&
            (t.dataHora === undefined || t.dataHora === null || typeof t.dataHora === 'string');
   };
 
@@ -282,31 +281,19 @@ export default function PaginaPrincipal() {
         return;
       }
 
-      const resultadoIA = await response.json() as unknown; 
+      const resultadoIA = await response.json() as unknown;
       
       console.log("### DEBUG: Resposta COMPLETA da API Route (resultadoIA):", JSON.stringify(resultadoIA, null, 2));
-      if (Array.isArray(resultadoIA) && resultadoIA.length > 0) {
-          console.log("### DEBUG: PRIMEIRO item do array resultadoIA:", JSON.stringify(resultadoIA[0], null, 2));
-          const firstCategory = resultadoIA[0] as Partial<IaParsedCategory>;
-          if (firstCategory.tarefas && Array.isArray(firstCategory.tarefas) && firstCategory.tarefas.length > 0) {
-              console.log("### DEBUG: PRIMEIRA tarefa do PRIMEIRO item:", JSON.stringify(firstCategory.tarefas[0], null, 2));
-          }
-      }
       
       let categoriasDaIA: IaParsedCategory[] = [];
       
       if (Array.isArray(resultadoIA) && resultadoIA.every(isValidIaCategory)) {
         categoriasDaIA = resultadoIA;
       } else {
-        // Tentativa de extrair de um objeto {categorias: [...]} (embora o log mostre array direto)
-        if (resultadoIA && typeof resultadoIA === 'object' && 'categorias' in resultadoIA && Array.isArray((resultadoIA as IaApiResponse).categorias) && (resultadoIA as IaApiResponse).categorias!.every(isValidIaCategory)) {
-            categoriasDaIA = (resultadoIA as IaApiResponse).categorias!;
-        } else {
-            console.error("Resposta da IA não está no formato esperado (após validação):", resultadoIA);
-            toast.error("A IA retornou um formato de dados inválido ou inesperado. Verifique o log do servidor e os logs de DEBUG no console do navegador.");
-            setProcessandoLoteComIA(false);
-            return;
-        }
+        console.error("Resposta da IA não está no formato esperado (após validação):", resultadoIA);
+        toast.error("A IA retornou um formato de dados inválido ou inesperado. Verifique os logs.");
+        setProcessandoLoteComIA(false);
+        return;
       }
       
       if (categoriasDaIA.length === 0 && textoEmLoteParaIA.trim() !== "") {
@@ -316,57 +303,15 @@ export default function PaginaPrincipal() {
         return;
       }
       
-      let totalCategoriasCriadasOuUsadas = 0;
-      let totalTarefasPrincipaisAdicionadas = 0;
-      let totalSubTarefasAdicionadas = 0;
-
-      for (const itemCategoria of categoriasDaIA) {
-        let categoriaIdFinal: string | undefined;
-        const nomeCategoriaLimpo = itemCategoria.nomeCategoria.trim();
-        const categoriaExistente = dados.categorias ? Object.values(dados.categorias).find(c => c.nome.toLowerCase() === nomeCategoriaLimpo.toLowerCase()) : undefined;
-        
-        if (categoriaExistente) {
-          categoriaIdFinal = categoriaExistente.id;
-        } else {
-          const emojiPadraoCat = EMOJIS_SUGERIDOS[Math.floor(Math.random() * EMOJIS_SUGERIDOS.length)];
-          const corPadraoCat = `#${Math.floor(Math.random()*16777215).toString(16).padStart(6, '0')}`;
-          categoriaIdFinal = adicionarNovaCategoria(nomeCategoriaLimpo, emojiPadraoCat, corPadraoCat);
-        }
-        if (categoriaIdFinal) { 
-            totalCategoriasCriadasOuUsadas++;
-        } else {
-             console.warn(`Categoria "${nomeCategoriaLimpo}" não pôde ser criada ou encontrada.`);
-             continue;
-        }
-
-        for (const tarefaIA of itemCategoria.tarefas) {
-          if (tarefaIA.textoTarefa && typeof tarefaIA.textoTarefa === 'string' && tarefaIA.textoTarefa.trim() !== "") {
-            const subTarefasParaCriar: SubTarefa[] = (tarefaIA.subTarefas || []).map(textoSub => ({
-                id: `sub_ia_${Date.now()}_${Math.random().toString(36).substr(2,5)}`,
-                texto: textoSub.trim(),
-                completada: false,
-            })).filter(st => st.texto !== "");
-
-            const idTarefaPai = adicionarTarefa(
-                categoriaIdFinal, 
-                tarefaIA.dataHora || undefined, 
-                tarefaIA.textoTarefa.trim(), 
-                subTarefasParaCriar
-            );
-            
-            if (idTarefaPai) {
-              totalTarefasPrincipaisAdicionadas++;
-              totalSubTarefasAdicionadas += subTarefasParaCriar.length;
-            }
-          }
-        }
-      }
-
-      if (totalTarefasPrincipaisAdicionadas > 0) {
-        let message = `${totalTarefasPrincipaisAdicionadas} tarefas principais`;
-        if (totalSubTarefasAdicionadas > 0) { message += ` e ${totalSubTarefasAdicionadas} sub-tarefas`; }
-        message += " processadas pela IA!";
-        if (totalCategoriasCriadasOuUsadas > 0) { message += ` Em ${totalCategoriasCriadasOuUsadas} categorias.`;}
+      // Chama a função do hook para adicionar o lote
+      const contadores = adicionarLoteDeDadosIA(categoriasDaIA);
+      
+      if (contadores.tarefas > 0) {
+        let message = `${contadores.tarefas} tarefas principais`;
+        if (contadores.subtarefas > 0) { message += ` e ${contadores.subtarefas} sub-tarefas`; }
+        message += " foram adicionadas";
+        if (contadores.categorias > 0) { message += ` em ${contadores.categorias} nova(s) categoria(s).`;}
+        else { message += " em categorias existentes."}
         toast.success(message);
       } else {
         toast.info("Nenhuma tarefa principal foi extraída pela IA. Verifique o formato do texto ou o log do servidor.");
@@ -381,7 +326,7 @@ export default function PaginaPrincipal() {
       setProcessandoLoteComIA(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [textoEmLoteParaIA, adicionarNovaCategoria, adicionarTarefa, dados.categorias, adicionarSubTarefa]); 
+  }, [textoEmLoteParaIA, adicionarLoteDeDadosIA]); // Removido dados.categorias e outras funções que agora são chamadas dentro do hook
 
   const handleNavigateCalendario = useCallback((newDate: Date, view: View, action: NavigateAction): void => {
     setDataAtualCalendario(newDate);
@@ -406,26 +351,22 @@ export default function PaginaPrincipal() {
       handleAbrirModalEditarTarefa(event.resource as Tarefa); 
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [handleAbrirModalEditarTarefa]); 
+  }, []); // Removida handleAbrirModalEditarTarefa das dependências, ela é estável por ser useCallback
 
-  const tarefasComNumeros: { tarefa: Tarefa; numero: number; categoria: CategoriaInfo }[] = [];
-  let contador = 1;
-
-  if (dados && dados.tarefas && typeof dados.tarefas === 'object' && dados.categorias && typeof dados.categorias === 'object') {
-    Object.keys(dados.tarefas).forEach(categoriaId => { 
-      const categoriaInfo = dados.categorias[categoriaId];
-      const tarefasDaCategoria = dados.tarefas[categoriaId] || [];
-      if (categoriaInfo) { 
-        for (const tarefa of tarefasDaCategoria) {
-            tarefasComNumeros.push({
-              tarefa,
-              numero: contador++,
-              categoria: categoriaInfo
+  const tarefasComNumeros: { tarefa: Tarefa; numero: number; categoria: CategoriaInfo }[] = useMemo(() => {
+    if (!dados || !dados.tarefas || !dados.categorias) return [];
+    let contadorLocal = 1; // Usar variável local para o contador
+    const resultado: { tarefa: Tarefa; numero: number; categoria: CategoriaInfo }[] = [];
+    Object.keys(dados.categorias).forEach(catId => {
+        const categoriaInfo = dados.categorias[catId];
+        if (categoriaInfo && dados.tarefas[catId]) {
+            (dados.tarefas[catId] || []).forEach(tarefa => {
+                resultado.push({ tarefa, numero: contadorLocal++, categoria: categoriaInfo });
             });
         }
-      }
     });
-  }
+    return resultado;
+  }, [dados]); // Depende de 'dados' para recalcular
   
   if (carregando) {
     return (

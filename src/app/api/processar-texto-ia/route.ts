@@ -14,7 +14,7 @@ const safetySettings = [
 export async function POST(request: NextRequest) {
   if (!GEMINI_API_KEY) {
     const errorMessage = "Chave da API do Gemini não configurada no servidor.";
-    console.error(`[API Rota ERRO CRÍTICO] ${errorMessage} Verifique as variáveis de ambiente .env.local e da Vercel.`);
+    console.error(`[API Rota ERRO CRÍTICO] ${errorMessage}`);
     return NextResponse.json({ error: errorMessage, details: "A chave da API não foi encontrada. Verifique as configurações do servidor." }, { status: 500 });
   }
 
@@ -33,7 +33,6 @@ export async function POST(request: NextRequest) {
         safetySettings,
         generationConfig: {
             responseMimeType: "application/json",
-            // temperature: 0.2 // Tentar uma temperatura mais baixa para JSON mais preciso
         }
     });
 
@@ -56,34 +55,11 @@ export async function POST(request: NextRequest) {
           - "subTarefas": array de strings (os textos das sub-tarefas; se não houver, um array vazio [])
       
       Se não houver categorias explícitas, mas houver uma lista de tarefas, coloque todas sob uma categoria "Geral".
-      Se uma tarefa não tiver data/hora explícita ou se a data/hora não puder ser interpretada como uma data futura ou válida baseada em ${hojeISO}, não inclua o campo "dataHora" para essa tarefa.
+      Se uma tarefa não tiver data/hora explícita ou se a data/hora não puder ser interpretada como uma data futura ou válida baseada em ${hojeISO}, omita o campo "dataHora" para essa tarefa ou deixe-o como null.
       Certifique-se de que a saída seja um JSON válido e nada mais. Não inclua nenhuma explicação ou texto adicional antes ou depois do JSON. Não coloque o JSON dentro de blocos de markdown como \`\`\`json ... \`\`\`.
 
-      Exemplo de Texto de Entrada:
-      Categoria: Estudos
-      Tarefa: [QUARTA 09:00] Aprender React
-      - Ler docs
-      Tarefa: Projeto Final [dia 15 14:00]
-      Sub-tarefa: Definir escopo
-
-      Exemplo de JSON de Saída Esperado (assumindo que hoje é 2025-05-28 e a próxima quarta é 2025-05-28, e dia 15 do próximo mês é 2025-06-15):
-      [
-        {
-          "nomeCategoria": "Estudos",
-          "tarefas": [
-            {
-              "textoTarefa": "Aprender React",
-              "dataHora": "2025-05-28T09:00:00.000Z", 
-              "subTarefas": ["Ler docs"]
-            },
-            {
-              "textoTarefa": "Projeto Final",
-              "dataHora": "2025-06-15T14:00:00.000Z",
-              "subTarefas": ["Definir escopo"]
-            }
-          ]
-        }
-      ]
+      Exemplo de JSON de Saída Esperado:
+      [{"nomeCategoria": "Estudos", "tarefas": [{"textoTarefa": "Aprender React", "dataHora": "2025-05-28T09:00:00.000Z", "subTarefas": ["Ler docs"]}, {"textoTarefa": "Projeto Final", "dataHora": "2025-06-15T14:00:00.000Z", "subTarefas": ["Definir escopo"]}]}]
 
       Texto para análise:
       ---
@@ -101,37 +77,14 @@ export async function POST(request: NextRequest) {
     }
     
     const textResponse = response.candidates[0].content.parts[0].text || "";
-    
-    console.log("[API Rota IA] Resposta da IA (texto bruto):", textResponse);
+    console.log("[API Rota IA] Resposta da IA (texto bruto inicial):", textResponse);
 
-    // --- LÓGICA DE LIMPEZA DE JSON MELHORADA ---
     let jsonString = textResponse.trim();
-    const startIndex = jsonString.indexOf('[');
-    const endIndex = jsonString.lastIndexOf(']');
-
-    if (startIndex !== -1 && endIndex !== -1 && endIndex > startIndex) {
-        jsonString = jsonString.substring(startIndex, endIndex + 1);
-    } else {
-        // Tenta encontrar um objeto JSON se não for um array
-        const startObjIndex = jsonString.indexOf('{');
-        const endObjIndex = jsonString.lastIndexOf('}');
-        if (startObjIndex !== -1 && endObjIndex !== -1 && endObjIndex > startObjIndex) {
-            jsonString = jsonString.substring(startObjIndex, endObjIndex + 1);
-             // Se for um objeto, mas esperamos um array, envolvemos ele em um array
-            try {
-                JSON.parse(jsonString); // Verifica se é um objeto JSON válido
-                if(!jsonString.trim().startsWith("[")){ // Se não for já um array
-                    jsonString = `[${jsonString}]`; 
-                }
-            } catch (e) {
-                // Não faz nada se não for um objeto JSON válido, o parse abaixo vai falhar e logar
-            }
-        } else {
-            console.error("[API Rota IA] Não foi possível extrair um JSON válido (array ou objeto) da resposta da IA. Resposta bruta:", textResponse);
-            return NextResponse.json({ error: "A IA não retornou um JSON reconhecível.", iaResponse: textResponse }, { status: 500 });
-        }
-    }
-    // --- FIM DA LÓGICA DE LIMPEZA ---
+    if (jsonString.startsWith("```json")) { jsonString = jsonString.substring(jsonString.indexOf('[') === -1 ? jsonString.indexOf('{') : jsonString.indexOf('[')); }
+    if (jsonString.endsWith("```")) { jsonString = jsonString.substring(0, jsonString.lastIndexOf(']') === -1 ? jsonString.lastIndexOf('}') : jsonString.lastIndexOf(']') + 1); }
+    jsonString = jsonString.trim();
+    
+    console.log("[API Rota IA] String JSON após tentativa de limpeza:", jsonString);
 
     try {
       const dadosEstruturados = JSON.parse(jsonString);
@@ -140,7 +93,7 @@ export async function POST(request: NextRequest) {
     } catch (parseError: unknown) { 
       const errorMessage = parseError instanceof Error ? parseError.message : "Erro de parse desconhecido";
       console.error("[API Rota IA] Erro ao parsear JSON da IA:", errorMessage);
-      console.error("[API Rota IA] String que causou o erro de parse (após tentativa de limpeza):", jsonString);
+      console.error("[API Rota IA] String que causou o erro de parse (após limpeza final):", jsonString);
       return NextResponse.json({ error: "A IA retornou um formato que não é JSON válido após limpeza.", iaResponse: textResponse, cleanedIaResponse: jsonString, parseError: errorMessage }, { status: 500 });
     }
 
@@ -155,12 +108,13 @@ export async function POST(request: NextRequest) {
     
     if (error && typeof error === 'object') {
         const errAsObject = error as { response?: { data?: unknown }, cause?: unknown, message?: string };
+        if (errAsObject.message && typeof errAsObject.message === 'string' && errAsObject.message.includes("API key")) { 
+            errorMessage = "Erro de autenticação com a API do Gemini. Verifique sua chave de API.";
+        }
         if (errAsObject.response && typeof errAsObject.response === 'object' && errAsObject.response.data) {
             errorDetails = errAsObject.response.data as Record<string, unknown>;
         } else if (errAsObject.cause) {
             errorDetails = errAsObject.cause as Record<string, unknown>;
-        } else if (errAsObject.message) { 
-            errorMessage = errAsObject.message;
         }
     }
 
