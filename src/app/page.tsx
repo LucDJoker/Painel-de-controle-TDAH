@@ -36,24 +36,21 @@ import { Progress } from "@/components/ui/progress";
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { Views, type View, type NavigateAction } from 'react-big-calendar';
 
-// --- DEFINIÇÃO DAS INTERFACES DA IA NO ESCOPO DO MÓDULO ---
+
+const EMOJIS_SUGERIDOS = ['📁', '🏠', '🎓', '💼', '💪', '❤️', '🎉', '💡', '💰', '✈️', '🍽️', '📚', '🛠️', '✨', '🎯', '🤔', '😊', '🔥'];
+
+// Tipos para a resposta da IA
 interface IaParsedTask {
   textoTarefa: string;
-  dataHora?: string; 
-  subTarefas: string[];
+  dataHora?: string | null; // Permitindo null explicitamente
+  subTarefas?: string[];   // Tornando opcional, e a IA deve retornar array vazio se não houver
 }
 interface IaParsedCategory {
   nomeCategoria: string;
   tarefas: IaParsedTask[];
 }
-interface IaApiResponse {
-  categorias?: IaParsedCategory[];
-  // Permite também que a resposta seja diretamente o array de categorias
-  [index: number]: IaParsedCategory; 
-  length?: number; 
-}
-
-const EMOJIS_SUGERIDOS = ['📁', '🏠', '🎓', '💼', '💪', '❤️', '🎉', '💡', '💰', '✈️', '🍽️', '📚', '🛠️', '✨', '🎯', '🤔', '😊', '🔥'];
+// Definição do tipo IaApiResponse para uso posterior
+type IaApiResponse = { categorias?: IaParsedCategory[] };
 
 export default function PaginaPrincipal() {
   const { setTheme, theme: currentTheme } = useTheme();
@@ -70,7 +67,6 @@ export default function PaginaPrincipal() {
   const [tarefaConcluidaTexto, setTarefaConcluidaTexto] = useState<string>('');
   const [mostrarParabensIndividual, setMostrarParabensIndividual] = useState(false);
   const [categoriaSelecionada, setCategoriaSelecionada] = useState<string>(''); 
-  
   const [nomeNovaCat, setNomeNovaCat] = useState('');
   const [emojiNovaCat, setEmojiNovaCat] = useState(EMOJIS_SUGERIDOS[0]);
   const [corNovaCat, setCorNovaCat] = useState('#718096');
@@ -244,12 +240,12 @@ export default function PaginaPrincipal() {
     setOpenEmojiPickerEdicaoCat(false);
   }, []);
 
+  // --- VALIDAÇÃO MAIS ROBUSTA ---
   const isValidIaTask = (task: unknown): task is IaParsedTask => {
     if (typeof task !== 'object' || task === null) return false;
-    const t = task as Partial<IaParsedTask>;
+    const t = task as Partial<IaParsedTask>; // Cast parcial para checagem
     return typeof t.textoTarefa === 'string' &&
-           Array.isArray(t.subTarefas) &&
-           t.subTarefas.every((s: unknown) => typeof s === 'string') &&
+           (Array.isArray(t.subTarefas) ? t.subTarefas.every((s: unknown) => typeof s === 'string') : t.subTarefas === undefined || t.subTarefas === null) &&
            (t.dataHora === undefined || t.dataHora === null || typeof t.dataHora === 'string');
   };
 
@@ -286,24 +282,14 @@ export default function PaginaPrincipal() {
         return;
       }
 
-      const resultadoIA = await response.json() as unknown; // Recebe como unknown
+      const resultadoIA = await response.json() as unknown; 
       
       console.log("### DEBUG: Resposta COMPLETA da API Route (resultadoIA):", JSON.stringify(resultadoIA, null, 2));
       if (Array.isArray(resultadoIA) && resultadoIA.length > 0) {
           console.log("### DEBUG: PRIMEIRO item do array resultadoIA:", JSON.stringify(resultadoIA[0], null, 2));
-          // Aserção de tipo para acessar 'tarefas' com segurança
-          const firstCategory = resultadoIA[0] as IaParsedCategory; 
+          const firstCategory = resultadoIA[0] as Partial<IaParsedCategory>;
           if (firstCategory.tarefas && Array.isArray(firstCategory.tarefas) && firstCategory.tarefas.length > 0) {
               console.log("### DEBUG: PRIMEIRA tarefa do PRIMEIRO item:", JSON.stringify(firstCategory.tarefas[0], null, 2));
-          }
-      } else if (resultadoIA && typeof resultadoIA === 'object' && 'categorias' in resultadoIA) {
-          const apiResponse = resultadoIA as IaApiResponse; // Aserção de tipo
-          if(apiResponse.categorias && apiResponse.categorias.length > 0) {
-            console.log("### DEBUG: PRIMEIRO item de resultadoIA.categorias:", JSON.stringify(apiResponse.categorias[0], null, 2));
-            const firstCategory = apiResponse.categorias[0];
-            if (firstCategory.tarefas && Array.isArray(firstCategory.tarefas) && firstCategory.tarefas.length > 0) {
-              console.log("### DEBUG: PRIMEIRA tarefa do PRIMEIRO item (aninhado):", JSON.stringify(firstCategory.tarefas[0], null, 2));
-            }
           }
       }
       
@@ -311,11 +297,21 @@ export default function PaginaPrincipal() {
       
       if (Array.isArray(resultadoIA) && resultadoIA.every(isValidIaCategory)) {
         categoriasDaIA = resultadoIA;
-      } else if (resultadoIA && typeof resultadoIA === 'object' && 'categorias' in resultadoIA && Array.isArray((resultadoIA as IaApiResponse).categorias) && (resultadoIA as IaApiResponse).categorias!.every(isValidIaCategory)) {
-        categoriasDaIA = (resultadoIA as IaApiResponse).categorias!;
       } else {
-        console.error("Resposta da IA não está no formato esperado (após validação):", resultadoIA);
-        toast.error("A IA retornou um formato de dados inesperado. Verifique o log do servidor.");
+        // Tentativa de extrair de um objeto {categorias: [...]} (embora o log mostre array direto)
+        if (resultadoIA && typeof resultadoIA === 'object' && 'categorias' in resultadoIA && Array.isArray((resultadoIA as IaApiResponse).categorias) && (resultadoIA as IaApiResponse).categorias!.every(isValidIaCategory)) {
+            categoriasDaIA = (resultadoIA as IaApiResponse).categorias!;
+        } else {
+            console.error("Resposta da IA não está no formato esperado (após validação):", resultadoIA);
+            toast.error("A IA retornou um formato de dados inválido ou inesperado. Verifique o log do servidor e os logs de DEBUG no console do navegador.");
+            setProcessandoLoteComIA(false);
+            return;
+        }
+      }
+      
+      if (categoriasDaIA.length === 0 && textoEmLoteParaIA.trim() !== "") {
+        console.error("Não foi possível extrair categorias válidas da resposta da IA (array vazio):", resultadoIA);
+        toast.info("Nenhuma categoria válida foi encontrada na resposta da IA. Verifique o texto ou o log do servidor.");
         setProcessandoLoteComIA(false);
         return;
       }
@@ -353,7 +349,7 @@ export default function PaginaPrincipal() {
 
             const idTarefaPai = adicionarTarefa(
                 categoriaIdFinal, 
-                tarefaIA.dataHora || undefined, // Usa undefined se dataHora for null ou undefined
+                tarefaIA.dataHora || undefined, 
                 tarefaIA.textoTarefa.trim(), 
                 subTarefasParaCriar
             );
