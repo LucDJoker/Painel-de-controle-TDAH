@@ -11,11 +11,23 @@ const safetySettings = [
   { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
 ];
 
+// Função utilitária para adicionar cabeçalhos CORS
+function withCors(response: Response) {
+  response.headers.set('Access-Control-Allow-Origin', '*');
+  response.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  response.headers.set('Access-Control-Allow-Headers', 'Content-Type');
+  return response;
+}
+
+export async function OPTIONS() {
+  return withCors(new Response(null, { status: 204 }));
+}
+
 export async function POST(request: NextRequest) {
   if (!GEMINI_API_KEY) {
     const errorMessage = "Chave da API do Gemini não configurada no servidor.";
     console.error(`[API Rota ERRO CRÍTICO] ${errorMessage}`);
-    return NextResponse.json({ error: errorMessage, details: "A chave da API não foi encontrada. Verifique as configurações do servidor." }, { status: 500 });
+    return withCors(NextResponse.json({ error: errorMessage, details: "A chave da API não foi encontrada. Verifique as configurações do servidor." }, { status: 500 }));
   }
 
   try {
@@ -24,7 +36,7 @@ export async function POST(request: NextRequest) {
     const hojeISO = new Date().toISOString();
 
     if (!textoParaProcessar || typeof textoParaProcessar !== 'string' || textoParaProcessar.trim() === "") {
-      return NextResponse.json({ error: "Texto para processar é obrigatório e não pode ser vazio." }, { status: 400 });
+      return withCors(NextResponse.json({ error: "Texto para processar é obrigatório e não pode ser vazio." }, { status: 400 }));
     }
 
     const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
@@ -73,7 +85,7 @@ export async function POST(request: NextRequest) {
     
     if (!response.candidates || !response.candidates[0] || !response.candidates[0].content || !response.candidates[0].content.parts || !response.candidates[0].content.parts[0]) {
         console.error("[API Rota IA] Resposta da IA não contém a estrutura esperada. Resposta completa:", JSON.stringify(response, null, 2));
-        return NextResponse.json({ error: "A IA retornou uma resposta vazia ou malformada.", iaResponse: response }, { status: 500 });
+        return withCors(NextResponse.json({ error: "A IA retornou uma resposta vazia ou malformada.", iaResponse: response }, { status: 500 }));
     }
     
     const textResponse = response.candidates[0].content.parts[0].text || "";
@@ -89,12 +101,12 @@ export async function POST(request: NextRequest) {
     try {
       const dadosEstruturados = JSON.parse(jsonString);
       console.log("[API Rota IA] JSON parseado com sucesso:", dadosEstruturados);
-      return NextResponse.json(dadosEstruturados, { status: 200 });
+      return withCors(NextResponse.json(dadosEstruturados, { status: 200 }));
     } catch (parseError: unknown) { 
       const errorMessage = parseError instanceof Error ? parseError.message : "Erro de parse desconhecido";
       console.error("[API Rota IA] Erro ao parsear JSON da IA:", errorMessage);
       console.error("[API Rota IA] String que causou o erro de parse (após limpeza final):", jsonString);
-      return NextResponse.json({ error: "A IA retornou um formato que não é JSON válido após limpeza.", iaResponse: textResponse, cleanedIaResponse: jsonString, parseError: errorMessage }, { status: 500 });
+      return withCors(NextResponse.json({ error: "A IA retornou um formato que não é JSON válido após limpeza.", iaResponse: textResponse, cleanedIaResponse: jsonString, parseError: errorMessage }, { status: 500 }));
     }
 
   } catch (error: unknown) { 
@@ -118,10 +130,10 @@ export async function POST(request: NextRequest) {
         }
     }
 
-    return NextResponse.json({ 
+    return withCors(NextResponse.json({ 
         error: "Erro interno do servidor ao contatar a IA.", 
         details: errorMessage,
         apiErrorDetails: errorDetails 
-    }, { status: 500 });
+    }, { status: 500 }));
   }
 }
