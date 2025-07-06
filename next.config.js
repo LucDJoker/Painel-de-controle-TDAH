@@ -12,5 +12,9 @@ const withPWA = nextPWA({
 // Envolve sua configuração do Next.js com a configuração do PWA
 export default withPWA({
   reactStrictMode: true,
+  trailingSlash: true,
+  images: {
+    unoptimized: true
+  },
   // outras configurações do Next.js podem ser adicionadas aqui
 });

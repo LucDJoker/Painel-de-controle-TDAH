@@ -20,6 +20,7 @@ import { useTheme } from "next-themes";
 import EmojiPicker, { EmojiClickData, Theme as EmojiTheme, SkinTones } from 'emoji-picker-react';
 
 import { usePainel } from "@/lib/use-painel";
+import { apiClient } from "@/lib/api-client";
 import PainelTarefa from "@/components/painel-tarefa";
 import { Estatisticas } from "@/components/estatisticas";
 import { Parabens } from "@/components/parabens";
@@ -265,23 +266,9 @@ export default function PaginaPrincipal() {
     const processingToastId = toast.loading("Processando seu texto com a IA...");
 
     try {
-      const response = await fetch('/api/processar-texto-ia', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ texto: textoEmLoteParaIA }),
-      });
-
+      const resultadoIA = await apiClient.processarTextoIA(textoEmLoteParaIA);
+      
       toast.dismiss(processingToastId);
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error("Erro da API ao processar texto:", errorData);
-        toast.error("Falha ao processar com IA.", { description: errorData.error || `Erro do servidor: ${response.status}` });
-        setProcessandoLoteComIA(false);
-        return;
-      }
-
-      const resultadoIA = await response.json() as unknown;
       
       console.log("### DEBUG: Resposta COMPLETA da API Route (resultadoIA):", JSON.stringify(resultadoIA, null, 2));
       
@@ -322,6 +309,8 @@ export default function PaginaPrincipal() {
       console.error("Erro na função handleAdicionarTarefasEmLoteComIA:", error);
       toast.dismiss(processingToastId);
       toast.error("Falha ao processar o texto com a IA.", {description: error instanceof Error ? error.message : "Erro desconhecido"});
+      setProcessandoLoteComIA(false);
+      return;
     } finally {
       setProcessandoLoteComIA(false);
     }

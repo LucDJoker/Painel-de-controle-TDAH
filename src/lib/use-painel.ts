@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import type { DadosApp, Tarefa, TarefaConcluida, Categoria, ConfigPomodoro, SubTarefa } from './types';
 import { carregarDados, salvarDados, resetarDados } from './armazenamento';
 import { obterDadosIniciais } from './dados-iniciais';
+import WidgetSync from './widget-sync';
 
 // Tipos da IA, agora o hook também entende eles
 export interface IaParsedTask {
@@ -58,7 +59,13 @@ export function usePainel() {
     }
   }, []); 
 
-  useEffect(() => { if (!carregando) { salvarDados(dados); } }, [dados, carregando]);
+  useEffect(() => { 
+    if (!carregando) { 
+      salvarDados(dados); 
+      // Sincronizar com o widget Android
+      WidgetSync.getInstance().updateWidget(Object.values(dados.tarefas || {}).flat());
+    } 
+  }, [dados, carregando]);
   
   const tocarSom = useCallback((audioElement: HTMLAudioElement | null, nomeSom: string): void => {
     if (audioElement) {
