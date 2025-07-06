@@ -3,7 +3,7 @@
 
 // Forçar o uso da URL da Vercel em todas as requisições
 const getApiBaseUrl = () => {
-  return 'https://SEU-PROJETO.vercel.app'; // Substitua pela sua URL real da Vercel
+  return 'https://painel-de-controle-tdah-6oo2.vercel.app';
 };
 
 export const apiClient = {
