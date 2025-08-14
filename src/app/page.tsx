@@ -274,10 +274,13 @@ export default function PaginaPrincipal() {
       
       let categoriasDaIA: IaParsedCategory[] = [];
       
-      if (Array.isArray(resultadoIA) && resultadoIA.every(isValidIaCategory)) {
-        categoriasDaIA = resultadoIA;
+      // A API pode retornar um objeto com { apiUsed, ...dados } ou diretamente os dados
+      const dadosIA = resultadoIA.apiUsed ? resultadoIA : resultadoIA;
+      
+      if (Array.isArray(dadosIA) && dadosIA.every(isValidIaCategory)) {
+        categoriasDaIA = dadosIA;
       } else {
-        console.error("Resposta da IA não está no formato esperado (após validação):", resultadoIA);
+        console.error("Resposta da IA não está no formato esperado (após validação):", dadosIA);
         toast.error("A IA retornou um formato de dados inválido ou inesperado. Verifique os logs.");
         setProcessandoLoteComIA(false);
         return;
@@ -299,6 +302,12 @@ export default function PaginaPrincipal() {
         message += " foram adicionadas";
         if (contadores.categorias > 0) { message += ` em ${contadores.categorias} nova(s) categoria(s).`;}
         else { message += " em categorias existentes."}
+        
+        // Adicionar informação sobre qual API foi usada
+        if (resultadoIA.apiUsed) {
+          message += ` (via ${resultadoIA.apiUsed})`;
+        }
+        
         toast.success(message);
       } else {
         toast.info("Nenhuma tarefa principal foi extraída pela IA. Verifique o formato do texto ou o log do servidor.");

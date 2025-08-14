@@ -1,15 +1,23 @@
 // src/lib/api-client.ts
 // Cliente de API que funciona tanto em desenvolvimento quanto em produção
 
-// Forçar o uso da URL da Vercel em todas as requisições
+// Detectar automaticamente a base da API
+// - No navegador: usar caminho relativo (mesma origem) para evitar problemas de hostname e CORS
+// - No servidor: usar variável de ambiente pública ou fallback para Vercel
 const getApiBaseUrl = () => {
-  return 'https://painel-de-controle-tdah-6oo2.vercel.app';
+	if (typeof window !== 'undefined') {
+		return '';
+	}
+
+	return process.env.NEXT_PUBLIC_SITE_URL || 'https://painel-de-controle-tdah-6oo2.vercel.app';
 };
 
 export const apiClient = {
   async processarTextoIA(texto: string) {
     const baseUrl = getApiBaseUrl();
-    const response = await fetch(`${baseUrl}/api/processar-texto-ia`, {
+    console.log('Usando API em:', baseUrl || 'mesma origem');
+
+    const response = await fetch(`${baseUrl}/api/processar-texto-ia/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ texto }),
@@ -29,7 +37,9 @@ export const apiClient = {
 
   async chatGPT(message: string, history: unknown[] = []) {
     const baseUrl = getApiBaseUrl();
-    const response = await fetch(`${baseUrl}/api/chat-gpt`, {
+    console.log('Usando API em:', baseUrl || 'mesma origem');
+
+    const response = await fetch(`${baseUrl}/api/chat-gpt/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message, history }),
