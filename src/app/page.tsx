@@ -274,13 +274,17 @@ export default function PaginaPrincipal() {
       
       let categoriasDaIA: IaParsedCategory[] = [];
       
-      // A API pode retornar um objeto com { apiUsed, ...dados } ou diretamente os dados
-      const dadosIA = resultadoIA.apiUsed ? resultadoIA : resultadoIA;
-      
-      if (Array.isArray(dadosIA) && dadosIA.every(isValidIaCategory)) {
-        categoriasDaIA = dadosIA;
+      // A API agora retorna diretamente o array de categorias
+      if (Array.isArray(resultadoIA) && resultadoIA.every(isValidIaCategory)) {
+        categoriasDaIA = resultadoIA;
+        console.log("### DEBUG: Categorias válidas extraídas:", categoriasDaIA);
       } else {
-        console.error("Resposta da IA não está no formato esperado (após validação):", dadosIA);
+        console.error("Resposta da IA não está no formato esperado (após validação):", resultadoIA);
+        console.error("Tipo de resultadoIA:", typeof resultadoIA);
+        console.error("É array?", Array.isArray(resultadoIA));
+        if (Array.isArray(resultadoIA)) {
+          console.error("Validação de cada item:", resultadoIA.map((item, index) => ({ index, isValid: isValidIaCategory(item), item })));
+        }
         toast.error("A IA retornou um formato de dados inválido ou inesperado. Verifique os logs.");
         setProcessandoLoteComIA(false);
         return;
@@ -302,11 +306,6 @@ export default function PaginaPrincipal() {
         message += " foram adicionadas";
         if (contadores.categorias > 0) { message += ` em ${contadores.categorias} nova(s) categoria(s).`;}
         else { message += " em categorias existentes."}
-        
-        // Adicionar informação sobre qual API foi usada
-        if (resultadoIA.apiUsed) {
-          message += ` (via ${resultadoIA.apiUsed})`;
-        }
         
         toast.success(message);
       } else {

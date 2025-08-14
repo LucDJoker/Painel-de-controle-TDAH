@@ -141,7 +141,39 @@ export async function POST(request: NextRequest) {
     try {
       const dadosEstruturados = JSON.parse(jsonString);
       console.log(`[API Rota IA] JSON parseado com sucesso (${apiUsed}):`, dadosEstruturados);
-      return withCors(NextResponse.json({ ...dadosEstruturados, apiUsed }, { status: 200 }));
+      
+      // Normalizar a resposta para garantir que seja sempre um array
+      let categoriasNormalizadas = dadosEstruturados;
+      
+      // Se for um objeto com chaves numéricas, converter para array
+      if (dadosEstruturados && typeof dadosEstruturados === 'object' && !Array.isArray(dadosEstruturados)) {
+        const chaves = Object.keys(dadosEstruturados).filter(key => !isNaN(Number(key)));
+        if (chaves.length > 0) {
+          categoriasNormalizadas = chaves.map(key => dadosEstruturados[key]);
+          console.log(`[API Rota IA] Convertido objeto com chaves numéricas para array:`, categoriasNormalizadas);
+        }
+      }
+      
+      // Se ainda não for array, tentar extrair de outras propriedades
+      if (!Array.isArray(categoriasNormalizadas)) {
+        if (dadosEstruturados.categorias && Array.isArray(dadosEstruturados.categorias)) {
+          categoriasNormalizadas = dadosEstruturados.categorias;
+        } else if (dadosEstruturados.data && Array.isArray(dadosEstruturados.data)) {
+          categoriasNormalizadas = dadosEstruturados.data;
+        } else {
+          throw new Error(`Formato de resposta inesperado: ${typeof dadosEstruturados}`);
+        }
+      }
+      
+      // Garantir que é um array válido
+      if (!Array.isArray(categoriasNormalizadas)) {
+        throw new Error(`Falha na normalização: resultado não é um array`);
+      }
+      
+      console.log(`[API Rota IA] Resposta final normalizada (${apiUsed}):`, categoriasNormalizadas);
+      
+      // Retornar o array diretamente, sem complicações
+      return withCors(NextResponse.json(categoriasNormalizadas, { status: 200 }));
     } catch (parseError: unknown) { 
       const errorMessage = parseError instanceof Error ? parseError.message : "Erro de parse desconhecido";
       console.error(`[API Rota IA] Erro ao parsear JSON da ${apiUsed}:`, errorMessage);
