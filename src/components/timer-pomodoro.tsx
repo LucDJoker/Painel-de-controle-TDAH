@@ -52,12 +52,12 @@ export function TimerPomodoro({
 
   const handleSalvarConfig = () => {
     const novasConfigs: Partial<ConfigPomodoro> = {
-      duracaoFocoMin: parseInt(focoInput, 10) || configAtual.duracaoFocoMin,
-      duracaoPausaCurtaMin: parseInt(pausaCurtaInput, 10) || configAtual.duracaoPausaCurtaMin,
-      duracaoPausaLongaMin: parseInt(pausaLongaInput, 10) || configAtual.duracaoPausaLongaMin,
-      ciclosAtePausaLonga: parseInt(ciclosPausaLongaInput, 10) || configAtual.ciclosAtePausaLonga,
+      duracaoFocoMin: Number.parseInt(focoInput, 10) || configAtual.duracaoFocoMin,
+      duracaoPausaCurtaMin: Number.parseInt(pausaCurtaInput, 10) || configAtual.duracaoPausaCurtaMin,
+      duracaoPausaLongaMin: Number.parseInt(pausaLongaInput, 10) || configAtual.duracaoPausaLongaMin,
+      ciclosAtePausaLonga: Number.parseInt(ciclosPausaLongaInput, 10) || configAtual.ciclosAtePausaLonga,
     };
-    if (novasConfigs.duracaoFocoMin! <= 0 || novasConfigs.duracaoPausaCurtaMin! <= 0 || novasConfigs.duracaoPausaLongaMin! <= 0 || novasConfigs.ciclosAtePausaLonga! <= 0) {
+    if ((novasConfigs.duracaoFocoMin ?? 0) <= 0 || (novasConfigs.duracaoPausaCurtaMin ?? 0) <= 0 || (novasConfigs.duracaoPausaLongaMin ?? 0) <= 0 || (novasConfigs.ciclosAtePausaLonga ?? 0) <= 0) {
         toast.error("As durações e ciclos devem ser maiores que zero."); // toast aqui
         return;
     }
@@ -116,82 +116,82 @@ export function TimerPomodoro({
   return (
     <Card className="mb-6 shadow-lg dark:bg-slate-800/70 dark:border-slate-700">
       <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-xl font-semibold">Timer Pomodoro</CardTitle>
+        <CardTitle className="text-lg font-semibold">Timer Pomodoro</CardTitle>
         <Button variant="ghost" size="icon" onClick={() => setMostrarConfig(s => !s)} aria-label="Configurações do Pomodoro">
-          <Settings2 className="w-5 h-5" />
+          <Settings2 className="w-4 h-4" />
         </Button>
       </CardHeader>
-      <CardContent className="flex flex-col items-center space-y-4 pt-2">
+      <CardContent className="flex flex-col items-center space-y-3 pt-2">
         {mostrarConfig ? (
-          <div className="w-full p-1 space-y-4">
-            <h4 className="text-md font-medium text-center mb-3 text-slate-700 dark:text-slate-300">Configurações do Timer</h4>
-            <div className="mb-4 space-y-2">
-                <p className="text-sm font-medium text-slate-600 dark:text-slate-400">Presets:</p>
-                <div className="flex flex-wrap gap-2">
+          <div className="w-full p-1 space-y-3">
+            <h4 className="text-sm font-medium text-center mb-2 text-slate-700 dark:text-slate-300">Configurações do Timer</h4>
+            <div className="mb-3 space-y-2">
+                <p className="text-xs font-medium text-slate-600 dark:text-slate-400">Presets:</p>
+                <div className="flex flex-wrap gap-1">
                     {PRESETS_POMODORO.map(preset => (
-                        <Button key={preset.nome} variant="outline" size="sm" onClick={() => aplicarPreset(preset)} className="dark:bg-slate-700 dark:hover:bg-slate-600">
+                        <Button key={preset.nome} variant="outline" size="sm" onClick={() => aplicarPreset(preset)} className="dark:bg-slate-700 dark:hover:bg-slate-600 text-xs px-2 py-1">
                             {preset.nome}
                         </Button>
                     ))}
                 </div>
             </div>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+            <div className="grid grid-cols-2 gap-x-3 gap-y-2">
               <div>
                 <Label htmlFor="focoMin" className="text-xs text-slate-600 dark:text-slate-400">Foco (min)</Label>
-                <Input id="focoMin" type="number" value={focoInput} onChange={(e) => setFocoInput(e.target.value)} className="dark:bg-slate-700 dark:border-slate-600" />
+                <Input id="focoMin" type="number" value={focoInput} onChange={(e) => setFocoInput(e.target.value)} className="dark:bg-slate-700 dark:border-slate-600 h-8" />
               </div>
               <div>
                 <Label htmlFor="pausaCurtaMin" className="text-xs text-slate-600 dark:text-slate-400">Pausa Curta (min)</Label>
-                <Input id="pausaCurtaMin" type="number" value={pausaCurtaInput} onChange={(e) => setPausaCurtaInput(e.target.value)} className="dark:bg-slate-700 dark:border-slate-600" />
+                <Input id="pausaCurtaMin" type="number" value={pausaCurtaInput} onChange={(e) => setPausaCurtaInput(e.target.value)} className="dark:bg-slate-700 dark:border-slate-600 h-8" />
               </div>
               <div>
                 <Label htmlFor="pausaLongaMin" className="text-xs text-slate-600 dark:text-slate-400">Pausa Longa (min)</Label>
-                <Input id="pausaLongaMin" type="number" value={pausaLongaInput} onChange={(e) => setPausaLongaInput(e.target.value)} className="dark:bg-slate-700 dark:border-slate-600" />
+                <Input id="pausaLongaMin" type="number" value={pausaLongaInput} onChange={(e) => setPausaLongaInput(e.target.value)} className="dark:bg-slate-700 dark:border-slate-600 h-8" />
               </div>
               <div>
                 <Label htmlFor="ciclosPausaLonga" className="text-xs text-slate-600 dark:text-slate-400">Ciclos p/ P. Longa</Label>
-                <Input id="ciclosPausaLonga" type="number" value={ciclosPausaLongaInput} onChange={(e) => setCiclosPausaLongaInput(e.target.value)} className="dark:bg-slate-700 dark:border-slate-600" />
+                <Input id="ciclosPausaLonga" type="number" value={ciclosPausaLongaInput} onChange={(e) => setCiclosPausaLongaInput(e.target.value)} className="dark:bg-slate-700 dark:border-slate-600 h-8" />
               </div>
             </div>
-            <Button onClick={handleSalvarConfig} size="sm" className="w-full mt-3 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600">
-              <Save className="w-4 h-4 mr-2" /> Salvar Configurações
+            <Button onClick={handleSalvarConfig} size="sm" className="w-full mt-2 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 h-8">
+              <Save className="w-3 h-3 mr-1" /> Salvar
             </Button>
           </div>
         ) : (
           <>
             <div 
-              className={`text-7xl font-bold p-4 rounded-lg ${getCorCiclo()}`}
+              className={`text-4xl font-bold p-3 rounded-lg ${getCorCiclo()}`}
               style={{ fontFamily: 'monospace' }}
             >
               {formatarTempo(tempoRestante)}
             </div>
-            <div className={`text-lg font-medium ${getCorCiclo()}`}>
+            <div className={`text-sm font-medium ${getCorCiclo()}`}>
               {getCicloTexto()} {cicloAtual === 'FOCO' && `(${ciclosCompletos + 1}º)`}
             </div>
-            <div className="flex space-x-3 pt-2">
+            <div className="flex space-x-2 pt-1">
               <Button 
                 onClick={onIniciarPausar} 
-                size="lg" 
+                size="sm" 
                 className={`
                   ${ativo ? "bg-orange-500 hover:bg-orange-600 dark:bg-orange-600 dark:hover:bg-orange-700" 
                          : "bg-green-500 hover:bg-green-600 dark:bg-green-600 dark:hover:bg-green-700"}
-                  text-white px-6 py-3 text-base
+                  text-white px-4 py-2 text-sm
                 `}
               >
-                {ativo ? <Pause className="w-5 h-5 mr-2" /> : <Play className="w-5 h-5 mr-2" />}
+                {ativo ? <Pause className="w-4 h-4 mr-1" /> : <Play className="w-4 h-4 mr-1" />}
                 {textoBotaoPrincipal}
               </Button>
               <Button 
                 onClick={onResetarCiclo} 
                 variant="outline" 
-                size="lg" 
-                className="dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600 dark:border-slate-600 px-6 py-3 text-base"
+                size="sm" 
+                className="dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600 dark:border-slate-600 px-4 py-2 text-sm"
               >
-                <RotateCcw className="w-5 h-5 mr-2" />
-                Resetar Ciclo
+                <RotateCcw className="w-4 h-4 mr-1" />
+                Resetar
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground dark:text-slate-400 pt-2">Ciclos de foco completados: {ciclosCompletos}</p>
+            <p className="text-xs text-muted-foreground dark:text-slate-400 pt-1">Ciclos completados: {ciclosCompletos}</p>
           </>
         )}
       </CardContent>

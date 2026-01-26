@@ -88,3 +88,29 @@
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
+
+/* Tweaks para React Big Calendar integrar com o tema */
+@layer components {
+  /* Bordas usam a cor do tema */
+  .rbc-month-view, .rbc-time-view, .rbc-agenda-view,
+  .rbc-header, .rbc-month-row, .rbc-time-content, .rbc-time-header, .rbc-agenda-content {
+    border-color: hsl(var(--border));
+  }
+
+  /* Botões da toolbar acompanham o tema */
+  .rbc-toolbar button {
+    @apply border border-border text-foreground bg-transparent rounded px-2 py-1;
+  }
+  .rbc-toolbar button.rbc-active {
+    @apply bg-secondary text-foreground;
+  }
+
+  /* Modo escuro: fundos e destaques */
+  .dark .rbc-month-view, .dark .rbc-time-view, .dark .rbc-agenda-view,
+  .dark .rbc-header, .dark .rbc-time-header, .dark .rbc-toolbar {
+    background-color: hsl(var(--card));
+    color: hsl(var(--foreground));
+  }
+  .dark .rbc-off-range-bg { background-color: rgba(255,255,255,0.035); }
+  .dark .rbc-today { background-color: rgba(59, 130, 246, 0.18); }
+}

@@ -12,8 +12,8 @@ const fontSans = FontSans({
 });
 
 export const metadata: Metadata = {
-  title: "Painel de Controle TDAH",
-  description: "Seu painel para gerenciar tarefas e manter o foco.",
+  title: "Focus ERP",
+  description: "Focus ERP — gerencie tarefas, finanças e mantenha o foco.",
   manifest: "/manifest.json",
   icons: { apple: "/icon-192x192.png" },
 };
@@ -25,7 +25,20 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR" suppressHydrationWarning>
-      <head />
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+                navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(reg => reg.unregister()));
+                if (typeof caches !== "undefined" && caches.keys) {
+                  caches.keys().then(keys => keys.forEach(key => caches.delete(key)));
+                }
+              }
+            `,
+          }}
+        />
+      </head>
       <body 
         className={cn(
           "min-h-screen bg-background font-sans antialiased",

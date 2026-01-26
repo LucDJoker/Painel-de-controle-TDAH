@@ -1,12 +1,15 @@
 // src/lib/use-painel.ts
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { toast } from 'sonner';
-import type { DadosApp, Tarefa, TarefaConcluida, Categoria, ConfigPomodoro, SubTarefa } from './types';
+import type { DadosApp, Tarefa, TarefaConcluida, Categoria, ConfigPomodoro, SubTarefa, Gasto, Receita, CategoriaGasto } from './types';
 import { carregarDados, salvarDados, resetarDados } from './armazenamento';
 import { obterDadosIniciais } from './dados-iniciais';
+import { authService } from './auth';
 import WidgetSync from './widget-sync';
+import { agendarNotificacao, cancelarNotificacao } from './notifications';
+import { criarEventoCalendario } from './calendar';
 
 // Tipos da IA, agora o hook também entende eles
 export interface IaParsedTask {
@@ -29,7 +32,7 @@ type TipoCicloPomodoro = 'FOCO' | 'PAUSA_CURTA' | 'PAUSA_LONGA';
 export function usePainel() {
   const dadosIniciaisGlobais = useRef(obterDadosIniciais());
   const [dados, setDados] = useState<DadosApp>(() => carregarDados());
-  const [carregando, setCarregando] = useState(true);
+  const [carregando, setCarregando] = useState(false); // Mudado para false
   const [textoNovaTarefa, setTextoNovaTarefa] = useState('');
   const [alarmeNovaTarefa, setAlarmeNovaTarefa] = useState<string>('');
 
@@ -52,7 +55,6 @@ export function usePainel() {
     const confPomoInicial = dadosCarregados.configPomodoro || dadosIniciaisGlobais.current.configPomodoro;
     setTempoRestantePomodoro(confPomoInicial.duracaoFocoMin * 60);
     setCiclosCompletos(0); 
-    setCarregando(false);
     if (typeof window !== 'undefined') {
         audioRefPomodoro.current = new Audio('/pomodoro_fim.mp3');
         audioRefAlarmeTarefa.current = new Audio('/alarme.mp3');
@@ -63,7 +65,9 @@ export function usePainel() {
     if (!carregando) { 
       salvarDados(dados); 
       // Sincronizar com o widget Android
-      WidgetSync.getInstance().updateWidget(Object.values(dados.tarefas || {}).flat());
+      if (typeof window !== 'undefined') {
+        WidgetSync.getInstance().updateWidget(Object.values(dados.tarefas || {}).flat());
+      }
     } 
   }, [dados, carregando]);
   
@@ -85,11 +89,11 @@ export function usePainel() {
                 const dataAlarme = new Date(tarefa.alarme);
                 const diffTempo = agora.getTime() - dataAlarme.getTime();
                 if (dataAlarme <= agora && diffTempo < 60000 && diffTempo >= 0) {
-                  if (Notification.permission === "granted") {
+                  if (typeof Notification !== 'undefined' && Notification.permission === "granted") {
                     new Notification("Alarme de Tarefa!", { body: `Hora de fazer: ${tarefa.texto}`, icon: "/icon-192x192.png", tag: tarefa.id });
                     tocarSom(audioRefAlarmeTarefa.current, "Alarme de Tarefa");
                     if (!algumaNotificacaoMostradaParaToast) { toast.info(`🔔 Alarme: ${tarefa.texto}`); algumaNotificacaoMostradaParaToast = true; }
-                  } else if (Notification.permission !== "denied") {
+                  } else if (typeof Notification !== 'undefined' && Notification.permission !== "denied") {
                     Notification.requestPermission().then(permission => {
                       if (permission === "granted") { 
                         new Notification("Alarme de Tarefa!", { body: `Hora de fazer: ${tarefa.texto}`, icon: "/icon-192x192.png", tag: tarefa.id });
@@ -223,13 +227,19 @@ export function usePainel() {
       novosDados.tarefas[novaTarefa.categoriaId]?.unshift(novaTarefa); 
       return novosDados;
     });
+    // Agendar notificação no Android via Capacitor
+    if (novaTarefa.alarme) {
+      const numId = Math.abs([...novaTarefa.id].reduce((acc, ch) => acc * 31 + ch.charCodeAt(0), 7)) % 2147483647;
+      agendarNotificacao(numId, 'Alarme de Tarefa', `Hora de fazer: ${novaTarefa.texto}`, new Date(novaTarefa.alarme));
+      criarEventoCalendario(novaTarefa.texto, undefined, 'Tarefa do Painel', new Date(novaTarefa.alarme));
+    }
     const categoriaInfo = dados.categorias[categoriaIdSelecionada];
     if(!textoParam){ 
         toast.success(`Tarefa "${textoFinalDaTarefa}" adicionada na categoria ${categoriaInfo?.nome || categoriaIdSelecionada}!`);
         setTextoNovaTarefa(''); setAlarmeNovaTarefa('');
     }
     return novaTarefa.id;
-  }, [textoNovaTarefa, alarmeNovaTarefa, dados.categorias, setTextoNovaTarefa, setAlarmeNovaTarefa]);
+  }, [textoNovaTarefa, dados.categorias, setTextoNovaTarefa, setAlarmeNovaTarefa]);
 
   const editarTarefa = useCallback((tarefaId: string, categoriaIdOriginal: string, novosDadosTarefa: Partial<Omit<Tarefa, 'id' | 'criadaEm'>>): void => {
     setDados(prev => {
@@ -281,6 +291,13 @@ export function usePainel() {
         dadosAtualizados.tarefas[categoriaAlvoId].unshift(tarefaAtualizada);
       }
       toast.success("Tarefa atualizada!");
+      // Atualizar notificação se alarme mudou
+      const numId = Math.abs([...tarefaId].reduce((acc, ch) => acc * 31 + ch.charCodeAt(0), 7)) % 2147483647;
+      cancelarNotificacao(numId);
+      if (tarefaAtualizada.alarme) {
+        agendarNotificacao(numId, 'Alarme de Tarefa', `Hora de fazer: ${tarefaAtualizada.texto}`, new Date(tarefaAtualizada.alarme));
+        criarEventoCalendario(tarefaAtualizada.texto, undefined, 'Tarefa do Painel (atualizada)', new Date(tarefaAtualizada.alarme));
+      }
       return dadosAtualizados;
     });
   }, []);
@@ -354,20 +371,32 @@ export function usePainel() {
   }, []);
   
   const resetarGeral = useCallback((): void => { 
-    const dadosIniciaisReset = resetarDados(); 
-    setDados(dadosIniciaisReset);
+    // Limpa tarefas e categorias, MAS preserva progresso/XP e configurações
+    setDados(prev => {
+      const progresso = prev.progresso || dadosIniciaisGlobais.current.progresso;
+      const config = prev.configPomodoro || dadosIniciaisGlobais.current.configPomodoro;
+      const dadosReset: DadosApp = {
+        categorias: {},
+        tarefas: {},
+        tarefasConcluidas: prev.tarefasConcluidas || [],
+        progresso,
+        configPomodoro: config,
+      };
+      return dadosReset;
+    });
     if (intervalRefPomodoro.current) clearInterval(intervalRefPomodoro.current);
     setPomodoroAtivo(false);
     setCicloAtualPomodoro('FOCO');
-    const configPomoReset = dadosIniciaisReset.configPomodoro || getConfigPomodoro(); // Usa getConfigPomodoro como fallback
+    const configPomoReset = getConfigPomodoro();
     setTempoRestantePomodoro(configPomoReset.duracaoFocoMin * 60);
     setCiclosCompletos(0);
-  }, [getConfigPomodoro]); // Depende de getConfigPomodoro
+    toast.success("Painel resetado!", { description: "Tarefas e categorias limpas. XP e progresso preservados." });
+  }, [getConfigPomodoro]);
 
   const obterTotalTarefas = useCallback((): number => {
     if (!dados || !dados.tarefas || typeof dados.tarefas !== 'object') return 0;
     return (Object.values(dados.tarefas)).reduce((total, tarefasDaCategoria) => total + (Array.isArray(tarefasDaCategoria) ? tarefasDaCategoria.length : 0), 0);
-  }, [dados.tarefas]);
+  }, [dados]);
 
   const obterTarefasHoje = useCallback((): TarefaConcluida[] => {
     const hoje = new Date();
@@ -377,7 +406,7 @@ export function usePainel() {
       const dataTarefa = new Date(tarefa.concluidaEm);
       return hoje.toDateString() === dataTarefa.toDateString();
     });
-  }, [dados.tarefasConcluidas]);
+  }, [dados]);
 
   const jaConcluidoHoje = useCallback((): boolean => {
     return obterTarefasHoje().length > 0;
@@ -412,7 +441,13 @@ export function usePainel() {
           const subTarefas = novosDados.tarefas[categoriaId][tarefaPaiIndex].subTarefas!;
           const subTarefaIndex = subTarefas.findIndex(st => st.id === subTarefaId);
           if (subTarefaIndex > -1) {
-            subTarefas[subTarefaIndex].completada = !subTarefas[subTarefaIndex].completada;
+            const novoEstado = !subTarefas[subTarefaIndex].completada;
+            subTarefas[subTarefaIndex].completada = novoEstado;
+            // Atualiza progresso de subtarefas concluídas para XP
+            const prog = novosDados.progresso || dadosIniciaisGlobais.current.progresso;
+            const atual = prog.totalSubTarefasConcluidas || 0;
+            prog.totalSubTarefasConcluidas = novoEstado ? atual + 1 : Math.max(0, atual - 1);
+            novosDados.progresso = prog;
           }
         }
       }
@@ -507,16 +542,176 @@ export function usePainel() {
     return contadores;
   }, []); // Removidas dependências que não são do hook (como 'dados')
 
+  // ========== FUNÇÕES DE GASTOS ==========
+  const adicionarGasto = useCallback((gasto: Gasto): void => {
+    setDados((prev) => {
+      const novosDados = JSON.parse(JSON.stringify(prev)) as DadosApp;
+      const financas = (novosDados as unknown as Record<string, unknown>).financas as Record<string, unknown> || { transacoes: [], gastos: [] };
+      if (!financas.gastos) financas.gastos = [];
+      (financas.gastos as Gasto[]).push(gasto);
+      (novosDados as unknown as Record<string, unknown>).financas = financas;
+      return novosDados;
+    });
+    toast.success('Gasto adicionado!', {
+      description: `${gasto.descricao} - R$ ${gasto.valor.toFixed(2)}`,
+    });
+  }, []);
+
+  const removerGasto = useCallback((gastoId: string): void => {
+    setDados(prev => {
+      const novosDados = JSON.parse(JSON.stringify(prev)) as DadosApp;
+      const financas = (novosDados as unknown as Record<string, unknown>).financas as Record<string, unknown> || { transacoes: [], gastos: [] };
+      if (!financas.gastos) financas.gastos = [];
+      const index = (financas.gastos as Gasto[]).findIndex((g: Gasto) => g.id === gastoId);
+      if (index > -1) {
+        (financas.gastos as Gasto[]).splice(index, 1);
+        (novosDados as unknown as Record<string, unknown>).financas = financas;
+        toast.success('Gasto removido!');
+      }
+      return novosDados;
+    });
+  }, []);
+
+  const atualizarGasto = useCallback((gastoAtualizado: Gasto): void => {
+    setDados(prev => {
+      const novosDados = JSON.parse(JSON.stringify(prev)) as DadosApp;
+      const financas = (novosDados as unknown as Record<string, unknown>).financas as Record<string, unknown> || { transacoes: [], gastos: [] };
+      if (!financas.gastos) financas.gastos = [];
+      const index = (financas.gastos as Gasto[]).findIndex((g: Gasto) => g.id === gastoAtualizado.id);
+      if (index > -1) {
+        (financas.gastos as Gasto[])[index] = { ...(financas.gastos as Gasto[])[index], ...gastoAtualizado };
+      } else {
+        (financas.gastos as Gasto[]).push(gastoAtualizado);
+      }
+      (novosDados as unknown as Record<string, unknown>).financas = financas;
+      return novosDados;
+    });
+    toast.success('Gasto atualizado!');
+  }, []);
+
+  const obterGastos = useCallback((): Gasto[] => {
+    const financas = (dados as unknown as Record<string, unknown>).financas as Record<string, unknown> || { transacoes: [], gastos: [] };
+    return (financas.gastos as Gasto[]) || [];
+  }, [dados]);
+
+  // ========== FUNÇÕES DE RECEITA ==========
+  const adicionarReceita = useCallback((receita: Receita): void => {
+    setDados((prev) => {
+      const novosDados = JSON.parse(JSON.stringify(prev)) as DadosApp;
+      const financas = (novosDados as unknown as Record<string, unknown>).financas as Record<string, unknown> || { transacoes: [], gastos: [], receitas: [] };
+      if (!financas.receitas) financas.receitas = [];
+      (financas.receitas as Receita[]).push(receita);
+      (novosDados as unknown as Record<string, unknown>).financas = financas;
+      return novosDados;
+    });
+    toast.success('Receita adicionada!', {
+      description: `${receita.descricao} - R$ ${receita.valor.toFixed(2)}`,
+    });
+  }, []);
+
+  const removerReceita = useCallback((receitaId: string): void => {
+    setDados((prev) => {
+      const novosDados = JSON.parse(JSON.stringify(prev)) as DadosApp;
+      const financas = (novosDados as unknown as Record<string, unknown>).financas as Record<string, unknown> || { transacoes: [], gastos: [], receitas: [] };
+      if (!financas.receitas) financas.receitas = [];
+      const index = (financas.receitas as Receita[]).findIndex((r: Receita) => r.id === receitaId);
+      if (index > -1) {
+        (financas.receitas as Receita[]).splice(index, 1);
+        (novosDados as unknown as Record<string, unknown>).financas = financas;
+        toast.success('Receita removida!');
+      }
+      return novosDados;
+    });
+  }, []);
+
+  const obterReceitas = useCallback((): Receita[] => {
+    const financas = (dados as unknown as Record<string, unknown>).financas as Record<string, unknown> || { transacoes: [], receitas: [] };
+    return (financas.receitas as Receita[]) || [];
+  }, [dados]);
+
+  // ========== FUNÇÕES DE CATEGORIAS DE GASTOS ==========
+  const CATEGORIAS_PADRAO_GASTOS: CategoriaGasto[] = useMemo(() => ([
+    { id: 'cat_alim', nome: 'Alimentação', emoji: '🍕', cor: '#FF6B6B', tipo: 'gasto' },
+    { id: 'cat_transp', nome: 'Transporte', emoji: '🚗', cor: '#4ECDC4', tipo: 'gasto' },
+    { id: 'cat_saude', nome: 'Saúde', emoji: '⚕️', cor: '#45B7D1', tipo: 'gasto' },
+    { id: 'cat_edu', nome: 'Educação', emoji: '📚', cor: '#FFA07A', tipo: 'gasto' },
+    { id: 'cat_div', nome: 'Diversão', emoji: '🎮', cor: '#98D8C8', tipo: 'gasto' },
+    { id: 'cat_morad', nome: 'Moradia', emoji: '🏠', cor: '#F7DC6F', tipo: 'gasto' },
+    { id: 'cat_util', nome: 'Utilidades', emoji: '💡', cor: '#BB8FCE', tipo: 'gasto' },
+    { id: 'cat_trab', nome: 'Trabalho', emoji: '💼', cor: '#85C1E2', tipo: 'gasto' },
+    { id: 'cat_rec_salario', nome: 'Salário', emoji: '💰', cor: '#00B894', tipo: 'receita' },
+    { id: 'cat_rec_freelance', nome: 'Freelance', emoji: '💻', cor: '#00D2D3', tipo: 'receita' },
+    { id: 'cat_rec_investimento', nome: 'Investimento', emoji: '📈', cor: '#A29BFE', tipo: 'receita' },
+  ]), []);
+
+  const obterCategoriasGastos = useCallback((): CategoriaGasto[] => {
+    const financas = (dados as unknown as Record<string, unknown>).financas as Record<string, unknown> || {};
+    if (financas.categoriasGastos && Array.isArray(financas.categoriasGastos)) {
+      return financas.categoriasGastos as CategoriaGasto[];
+    }
+    return CATEGORIAS_PADRAO_GASTOS;
+  }, [dados, CATEGORIAS_PADRAO_GASTOS]);
+
+  const adicionarCategoriaGasto = useCallback((categoria: CategoriaGasto): void => {
+    setDados((prev) => {
+      const novosDados = JSON.parse(JSON.stringify(prev)) as DadosApp;
+      const financas = (novosDados as unknown as Record<string, unknown>).financas as Record<string, unknown> || { transacoes: [], gastos: [], receitas: [], categoriasGastos: [] };
+      if (!financas.categoriasGastos) financas.categoriasGastos = [];
+      
+      // Não adicionar duplicada
+      if ((financas.categoriasGastos as CategoriaGasto[]).some((c: CategoriaGasto) => c.nome.toLowerCase() === categoria.nome.toLowerCase())) {
+        toast.error('Categoria já existe!');
+        return prev;
+      }
+      
+      (financas.categoriasGastos as CategoriaGasto[]).push(categoria);
+      (novosDados as unknown as Record<string, unknown>).financas = financas;
+      return novosDados;
+    });
+    toast.success('Categoria adicionada!', {
+      description: `${categoria.emoji} ${categoria.nome}`,
+    });
+  }, []);
+
+  const removerCategoriaGasto = useCallback((categoriaId: string): void => {
+    setDados((prev) => {
+      const novosDados = JSON.parse(JSON.stringify(prev)) as DadosApp;
+      const financas = (novosDados as unknown as Record<string, unknown>).financas as Record<string, unknown> || {};
+      if (!financas.categoriasGastos) financas.categoriasGastos = [];
+      
+      const index = (financas.categoriasGastos as CategoriaGasto[]).findIndex((c: CategoriaGasto) => c.id === categoriaId);
+      if (index > -1 && !CATEGORIAS_PADRAO_GASTOS.some(cp => cp.id === categoriaId)) {
+        (financas.categoriasGastos as CategoriaGasto[]).splice(index, 1);
+        (novosDados as unknown as Record<string, unknown>).financas = financas;
+        toast.success('Categoria removida!');
+      } else {
+        toast.error('Não pode remover categorias padrão!');
+      }
+      return novosDados;
+    });
+  }, [CATEGORIAS_PADRAO_GASTOS]);
+
   return {
-    dados, carregando, concluirTarefa, adicionarTarefa, excluirTarefa, editarTarefa,
+    dados, carregando, usuario: authService.obterUsuarioLogado(), concluirTarefa, adicionarTarefa, excluirTarefa, editarTarefa,
     adicionarNovaCategoria, excluirCategoria, editarCategoria, 
-    resetar: resetarGeral, 
+    resetarGeralDoHook: resetarGeral, 
     obterTotalTarefas, obterTarefasHoje, jaConcluidoHoje, 
     textoNovaTarefa, setTextoNovaTarefa, alarmeNovaTarefa, setAlarmeNovaTarefa,
     tempoRestantePomodoro, pomodoroAtivo, cicloAtualPomodoro, ciclosCompletos, 
-    iniciarOuPausarPomodoro, resetarPomodoro: resetarCicloPomodoro, 
+    iniciarOuPausarPomodoro, resetarCicloPomodoro: resetarCicloPomodoro, 
     atualizarConfigPomodoro, configPomodoro: getConfigPomodoro(),
     adicionarSubTarefa, alternarCompletarSubTarefa, excluirSubTarefa,
-    adicionarLoteDeDadosIA // EXPORTANDO A NOVA FUNÇÃO
+    adicionarLoteDeDadosIA,
+    adicionarGasto,
+    removerGasto,
+    atualizarGasto,
+    obterGastos,
+    adicionarReceita,
+    removerReceita,
+    obterReceitas,
+    obterCategoriasGastos,
+    adicionarCategoriaGasto,
+    removerCategoriaGasto,
+    handleLogout: () => authService.logout()
   };
 }

@@ -56,6 +56,7 @@ export function obterDadosIniciais(): DadosApp {
       tarefasConcluidasPorCategoria: {},
       ultimaTarefaConcluida: undefined,
       totalPomodorosFocoCompletos: 0,
+      totalSubTarefasConcluidas: 0,
     },
     configPomodoro: configPomodoroInicial,
   }));

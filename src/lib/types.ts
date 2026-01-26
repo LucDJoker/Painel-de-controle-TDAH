@@ -41,6 +41,7 @@ export interface ProgressoUsuario {
   tarefasConcluidasPorCategoria: Record<string, number>;
   ultimaTarefaConcluida?: Date | string;
   totalPomodorosFocoCompletos?: number;
+  totalSubTarefasConcluidas?: number;
 }
 
 export interface ConfigPomodoro {
@@ -56,4 +57,53 @@ export interface DadosApp {
   progresso: ProgressoUsuario;
   categorias: Record<string, Categoria>;
   configPomodoro: ConfigPomodoro;
+}
+
+// Tipos de Finanças
+export interface Transacao {
+  id: string;
+  amount: number;
+  category: string;
+  description?: string;
+  date: string; // ISO
+  fixo?: boolean;
+}
+
+export interface Gasto {
+  id: string;
+  descricao: string;
+  valor: number;
+  categoria: string;
+  data: string; // ISO
+  anotacoes?: string;
+  fixo?: boolean;
+}
+
+export interface Receita {
+  id: string;
+  descricao: string;
+  valor: number;
+  categoria: string;
+  data: string; // ISO
+  anotacoes?: string;
+}
+
+export interface CategoriaGasto {
+  id: string;
+  nome: string;
+  emoji: string;
+  cor: string;
+  tipo: 'gasto' | 'receita'; // Tipo de categoria
+}
+
+export interface FinancasApp {
+  transacoes: Transacao[];
+  gastos?: Gasto[];
+  receitas?: Receita[];
+  categoriasGastos?: CategoriaGasto[];
+}
+
+// Extensão dos dados da aplicação para incluir finanças
+export interface DadosAppComFinancas extends DadosApp {
+  financas?: FinancasApp;
 }

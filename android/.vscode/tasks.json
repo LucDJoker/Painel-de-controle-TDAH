@@ -1,0 +1,17 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "gradle-assemble-debug",
+			"type": "shell",
+			"command": ".\\gradlew.bat assembleDebug",
+			"isBackground": false
+		},
+		{
+			"label": "gradle-assemble-debug",
+			"type": "shell",
+			"command": ".\\gradlew.bat assembleDebug",
+			"isBackground": false
+		}
+	]
+}

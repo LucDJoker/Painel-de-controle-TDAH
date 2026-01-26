@@ -1,6 +1,7 @@
 // src/components/calendario-tarefas.tsx
 'use client';
 
+import { useEffect } from 'react';
 import { Calendar, dateFnsLocalizer, Views, type EventProps, type View, type NavigateAction } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -13,7 +14,7 @@ const locales = {
 const localizer = dateFnsLocalizer({
   format,
   parse,
-  startOfWeek,
+  startOfWeek: (date) => startOfWeek(date, { weekStartsOn: 0 }), // 0 = Domingo, 1 = Segunda
   getDay,
   locales,
 });
@@ -53,21 +54,23 @@ interface CalendarioTarefasProps {
 }
 
 const EventoDoCalendario = ({ event }: EventProps<CalendarEvent>) => {
-  const corEvento = event.resource?.categoriaInfo?.cor || '#3b82f6';
+  const isFeriado = event.title?.startsWith('Feriado:');
+  const corEvento = isFeriado ? '#dc2626' : (event.resource?.categoriaInfo?.cor || '#3b82f6');
+  
   return (
     <div 
-      className="text-xs p-1 rounded text-white overflow-hidden" // Adicionado overflow-hidden
-      title={event.title} // Tooltip com o título completo
+      className={`text-xs p-1 rounded text-white overflow-hidden ${isFeriado ? 'font-semibold' : ''}`}
+      title={event.title}
       style={{ 
         backgroundColor: corEvento, 
-        opacity: 0.9,
+        opacity: isFeriado ? 0.95 : 0.9,
         borderColor: corEvento,
         borderWidth: '1px',
         borderStyle: 'solid',
-        lineHeight: '1.2', // Melhorar espaçamento interno
+        lineHeight: '1.2',
       }}
     >
-      <strong>{event.title}</strong>
+      <strong>{isFeriado ? event.title.replace('Feriado: ', '🎉 ') : event.title}</strong>
       {event.resource?.categoriaInfo && (
         <div className="text-[10px] opacity-80 truncate">{event.resource.categoriaInfo.emoji} {event.resource.categoriaInfo.nome}</div>
       )}
@@ -84,6 +87,18 @@ export function CalendarioTarefas({
   onSelectEvent, 
   onSelectSlot 
 }: CalendarioTarefasProps) {
+  
+  // Dynamically load React Big Calendar styles on client-side
+  useEffect(() => {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://jquense.github.io/react-big-calendar/lib/css/react-big-calendar.css';
+    document.head.appendChild(link);
+    
+    return () => {
+      link.remove();
+    };
+  }, []);
   
   const availableViews: View[] = [Views.MONTH, Views.WEEK, Views.DAY, Views.AGENDA];
 

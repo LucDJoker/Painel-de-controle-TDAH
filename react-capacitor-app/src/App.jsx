@@ -96,7 +96,7 @@ function App() {
   return (
     <div className="app">
       <header className="header">
-        <h1>Painel de Controle</h1>
+        <h1>Focus ERP</h1>
         <div className="stats">
           <div className="stat">
             <Clock size={20} />
