@@ -92,18 +92,51 @@ export function CalendarioTarefas({
   useEffect(() => {
     const link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = 'https://jquense.github.io/react-big-calendar/lib/css/react-big-calendar.css';
+    link.href = 'https://cdn.jsdelivr.net/npm/react-big-calendar@1.18.0/lib/css/react-big-calendar.css';
     document.head.appendChild(link);
     
     return () => {
-      link.remove();
+      if (document.head.contains(link)) {
+        document.head.removeChild(link);
+      }
     };
   }, []);
   
   const availableViews: View[] = [Views.MONTH, Views.WEEK, Views.DAY, Views.AGENDA];
 
   return (
-    <div className="h-[70vh] min-h-[550px] text-sm md:text-base bg-card p-1 sm:p-2 rounded-md shadow"> 
+    <div className="h-[70vh] min-h-[550px] text-sm md:text-base bg-card p-1 sm:p-2 rounded-md shadow">
+      <style jsx global>{`
+        .rbc-calendar {
+          height: 100%;
+        }
+        .rbc-month-view {
+          border: 1px solid #ddd;
+        }
+        .rbc-header {
+          border-bottom: 1px solid #ddd;
+          background: #f7f7f7;
+          padding: 3px 6px;
+          font-weight: bold;
+        }
+        .rbc-date-cell {
+          text-align: right;
+          padding: 5px;
+        }
+        .rbc-off-range-bg {
+          background: #f5f5f5;
+        }
+        .rbc-today {
+          background: #eaf6ff;
+        }
+        .rbc-event {
+          background: #3174ad;
+          border-radius: 3px;
+          color: white;
+          padding: 2px 5px;
+          font-size: 12px;
+        }
+      `}</style> 
       <Calendar
         localizer={localizer}
         events={events}
