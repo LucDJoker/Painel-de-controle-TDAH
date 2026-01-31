@@ -20,7 +20,7 @@ interface CalendarioComGastosProps {
   onAdicionarGasto: (gasto: Gasto) => void;
   onRemoverGasto: (id: string) => void;
   currentDate: Date;
-  currentView: string;
+  currentView: View;
   onNavigate: (newDate: Date, view: View, action: NavigateAction) => void;
   onView: (view: View) => void;
 }
@@ -190,7 +190,7 @@ export function CalendarioComGastos({
       <CalendarioTarefas
         events={[...tarefas, ...feriadosEventos]}
         currentDate={currentDate}
-        currentView={currentView as 'month' | 'week' | 'day' | 'agenda'}
+        currentView={currentView}
         onNavigate={onNavigate}
         onView={onView}
         onSelectSlot={handleSelectSlot}
