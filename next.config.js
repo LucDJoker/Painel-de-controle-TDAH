@@ -23,6 +23,5 @@ export default withPWA({
   },
   output: 'export',
   basePath: basePath || undefined,
-  assetPrefix: basePath ? `${basePath}/` : undefined,
   // outras configurações do Next.js podem ser adicionadas aqui
 });
