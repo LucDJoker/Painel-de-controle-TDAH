@@ -1,6 +1,8 @@
 // src/lib/api-client.ts
 // Cliente de API que funciona tanto em desenvolvimento quanto em produção
 
+import type { IaParsedCategory, IaParsedTask } from './use-painel';
+
 // Detectar automaticamente a base da API
 // - No navegador: usar caminho relativo (mesma origem) para evitar problemas de hostname e CORS
 // - No servidor: usar variável de ambiente pública ou fallback para Vercel
@@ -19,9 +21,9 @@ export const apiClient = {
     const fallbackParse = () => {
       // Fallback local: processa texto com estrutura hierárquica e datas
       const linhas = texto.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
-      const categorias: any[] = [];
-      let categoriaAtual: any = null;
-      let tarefaAtual: any = null;
+      const categorias: IaParsedCategory[] = [];
+      let categoriaAtual: IaParsedCategory | null = null;
+      let tarefaAtual: IaParsedTask | null = null;
       let semanaAtual = 1;
 
       // Função para calcular data da semana
@@ -68,6 +70,9 @@ export const apiClient = {
           if (tarefaAtual) {
             const subTexto = linha.replace(/^(sub-tarefa:|[-*])\s*/i, '').trim();
             if (subTexto) {
+              if (!tarefaAtual.subTarefas) {
+                tarefaAtual.subTarefas = [];
+              }
               tarefaAtual.subTarefas.push(subTexto);
             }
           }

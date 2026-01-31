@@ -14,7 +14,7 @@ const locales = {
 const localizer = dateFnsLocalizer({
   format,
   parse,
-  startOfWeek: (date) => startOfWeek(date, { weekStartsOn: 0 }), // 0 = Domingo, 1 = Segunda
+  startOfWeek: (date: Date) => startOfWeek(date, { weekStartsOn: 0 }), // 0 = Domingo, 1 = Segunda
   getDay,
   locales,
 });

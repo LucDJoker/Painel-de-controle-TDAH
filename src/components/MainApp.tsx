@@ -287,7 +287,7 @@ export default function MainApp() {
       
       console.log(`✅ Categorias parseadas (${categoriasParsed.length}):`, categoriasParsed);
       
-      let contadores = adicionarLoteDeDadosIA(categoriasParsed);
+      const contadores = adicionarLoteDeDadosIA(categoriasParsed);
       console.log("📊 Contadores finais:", contadores);
       
       if (contadores.tarefas === 0) {
