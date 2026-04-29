@@ -102,12 +102,10 @@ export const authService = {
 
     if (supabaseEnabled && supabaseClient) {
       const email = mapNickToEmail(nick);
-      let resultado = await supabaseClient.auth.signInWithPassword({
+      const resultado = await supabaseClient.auth.signInWithPassword({
         email,
         password: senha,
       });
-
-
 
       if (resultado.error || !resultado.data.user) {
         return { sucesso: false, erro: resultado.error?.message || 'Nick ou senha incorretos' };
