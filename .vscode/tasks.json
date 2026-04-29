@@ -1,0 +1,23 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "build-apk-prepare",
+			"type": "shell",
+			"command": "bun run apk:prepare",
+			"isBackground": false
+		},
+		{
+			"label": "gradle-assemble-debug",
+			"type": "shell",
+			"command": "cd android; .\\gradlew.bat assembleDebug",
+			"isBackground": false
+		},
+		{
+			"label": "cap-sync-android",
+			"type": "shell",
+			"command": "powershell -Command \"cd 'e:\\HD Externo\\app meu cronograma\\painel-de-controle'; bun x @capacitor/cli sync android\"",
+			"isBackground": false
+		}
+	]
+}
