@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { toast } from 'sonner';
 import type { DadosApp, Tarefa, TarefaConcluida, Categoria, ConfigPomodoro, SubTarefa, Gasto, Receita, CategoriaGasto } from './types';
-import { carregarDados, salvarDados, resetarDados } from './armazenamento';
+import { carregarDados, carregarDadosDaNuvem, salvarDados, resetarDados } from './armazenamento';
 import { obterDadosIniciais } from './dados-iniciais';
 import { authService } from './auth';
 import WidgetSync from './widget-sync';
@@ -61,9 +61,28 @@ export function usePainel() {
     }
   }, []); 
 
+  useEffect(() => {
+    let ativo = true;
+
+    const sincronizarNuvem = async () => {
+      const usuarioAtual = authService.obterUsuarioLogado();
+      const dadosRemotos = await carregarDadosDaNuvem(usuarioAtual?.id);
+      if (ativo && dadosRemotos) {
+        setDados(dadosRemotos);
+      }
+    };
+
+    void sincronizarNuvem();
+
+    return () => {
+      ativo = false;
+    };
+  }, []);
+
   useEffect(() => { 
     if (!carregando) { 
-      salvarDados(dados); 
+      const usuarioAtual = authService.obterUsuarioLogado();
+      salvarDados(dados, usuarioAtual?.id); 
       // Sincronizar com o widget Android
       if (typeof window !== 'undefined') {
         WidgetSync.getInstance().updateWidget(Object.values(dados.tarefas || {}).flat());

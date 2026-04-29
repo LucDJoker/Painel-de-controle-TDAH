@@ -19,12 +19,12 @@ export function AuthForm({ onLogin }: AuthFormProps) {
   const [senha, setSenha] = useState('');
   const [carregando, setCarregando] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setCarregando(true);
 
     if (modo === 'registro') {
-      const resultado = authService.registrar(nome, nick, senha);
+      const resultado = await authService.registrar(nome, nick, senha);
       if (resultado.sucesso) {
         toast.success('Usuário criado!');
         setModo('login');
@@ -32,7 +32,7 @@ export function AuthForm({ onLogin }: AuthFormProps) {
         toast.error(resultado.erro || 'Erro');
       }
     } else {
-      const resultado = authService.login(nick, senha);
+      const resultado = await authService.login(nick, senha);
       if (resultado.sucesso) {
         toast.success('Login realizado!');
         onLogin();

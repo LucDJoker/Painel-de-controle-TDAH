@@ -69,29 +69,37 @@ try {
     }
 
     if ($LASTEXITCODE -eq 0) {
-        $apkPath = if ($Release) { Join-Path $ANDROID_DIR "app\build\outputs\apk\release\app-release-unsigned.apk" } else { Join-Path $ANDROID_DIR "app\build\outputs\apk\debug\app-debug.apk" }
+        if ($Release) {
+            $apkPath = Join-Path $ANDROID_DIR 'app\build\outputs\apk\release\app-release-unsigned.apk'
+        }
+        else {
+            $apkPath = Join-Path $ANDROID_DIR 'app\build\outputs\apk\debug\app-debug.apk'
+        }
         if (Test-Path $apkPath) {
             $size = (Get-Item $apkPath).Length / 1MB
             Write-Success "APK gerado: $apkPath"
             Write-Success ("Tamanho: {0:F2} MB" -f $size)
-            Write-Host "Para instalar: adb install -r \"$apkPath\""
+            Write-Host ("Para instalar: adb install -r `"" + $apkPath + "`"")
         }
         else {
-            Write-Error-Custom "APK nao encontrado no caminho esperado"stom "APK nao encontrado no caminho esperado"
+            Write-Error-Custom "APK nao encontrado no caminho esperado"
             exit 1
-        }       
+        }
     }
-} }
-else {
-    Write-Error-Custom "Compilacao Gradle falhou"        Write-Error-Custom "Compilacao Gradle falhou"
-    Write-Host "Dicas:""
+    else {
+        Write-Error-Custom "Compilacao Gradle falhou"
+        Write-Host "Dicas:"
         Write-Host "  - Execute ./gradlew clean"
         Write-Host "  - Verifique Java e Android SDK"
-        Write-Host "  - Tente novamente"        Write-Host "  - Tente novamente"
+        Write-Host "  - Tente novamente"
         exit 1
     }
 }
-finally {finally {
+catch {
+    Write-Error-Custom "Erro durante compilacao Gradle: $_"
+    exit 1
+}
+finally {
     Pop-Location
 }
 
